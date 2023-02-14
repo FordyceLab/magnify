@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Assay:
     type: str
     ids: np.ndarray
