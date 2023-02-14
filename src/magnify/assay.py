@@ -3,8 +3,8 @@ import numpy as np
 class Assay:
     type: str
     ids: np.ndarray
-    abs_pos: np.ndarray
-    rel_pos: np.ndarray
+    subimage_offsets: np.ndarray
+    centers: np.ndarray
 
     images: np.ndarray
     subimages: np.ndarray

@@ -4,7 +4,7 @@ import cv2 as cv
 import numpy as np
 import scipy
 
-from magnify import util
+from magnify import utils
 from magnify.assay import Assay
 
 logger = logging.getLogger(__name__)
@@ -18,12 +18,11 @@ def find_buttons(image: np.ndarray,
                  min_button_radius: int = 4,
                  max_button_radius: int = 15,
                  cluster_penalty: float = 10):
-    debug_dict = {}
-    img = util.to_uint8(image)
+    image = utils.to_uint8(image)
     min_button_dist = round(min(row_dist, col_dist) / 2)
 
     # Step 1: Find an imperfect button mask by thresholding.
-    mask = cv.adaptiveThreshold(img,
+    mask = cv.adaptiveThreshold(image,
                                 maxValue=255,
                                 adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
                                 thresholdType=cv.THRESH_BINARY,
@@ -46,13 +45,13 @@ def find_buttons(image: np.ndarray,
 
     # Step 3: Cluster the points into distinct rows and columns.
     row_labels = cluster_1d(points[:, 0],
-                            total_length=img.shape[0],
+                            total_length=image.shape[0],
                             num_clusters=num_rows,
                             cluster_length=row_dist,
                             ideal_num_points=num_cols,
                             penalty=cluster_penalty)
     col_labels = cluster_1d(points[:, 1],
-                            total_length=img.shape[1],
+                            total_length=image.shape[1],
                             num_clusters=num_cols,
                             cluster_length=col_dist,
                             ideal_num_points=num_rows,
