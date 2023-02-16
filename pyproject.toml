@@ -11,6 +11,8 @@ opencv-python = "^4.7.0"
 numpy = "^1.21.0"
 scipy = "1.9.1"
 basicpy = "^1.0.1"
+tifffile = "^2023.2.3"
+tqdm = "^4.64"
 
 
 [build-system]
