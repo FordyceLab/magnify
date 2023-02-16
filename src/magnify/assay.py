@@ -4,7 +4,8 @@ import numpy as np
 class Assay:
     type: str
     ids: np.ndarray
-    channels: np.ndarray
+    times: np.ndarray
+    channels: list[str]
 
     images: np.ndarray
     regions: np.ndarray

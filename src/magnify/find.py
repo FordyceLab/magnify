@@ -1,5 +1,6 @@
 import logging
 
+from numpy.typing import ArrayLike
 import cv2 as cv
 import numpy as np
 import scipy
@@ -11,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 def find_buttons(
-    image: np.ndarray,
+    images: np.ndarray,
+    channels: ArrayLike,
     num_rows: int = 46,
     num_cols: int = 24,
     row_dist: float = 126.3,
@@ -19,9 +21,14 @@ def find_buttons(
     min_button_radius: int = 4,
     max_button_radius: int = 15,
     cluster_penalty: float = 10,
-) -> np.ndarray:
-    image = utils.to_uint8(image)
+    search_on: str = "egfp",
+) -> Assay:
+    channels = np.array(channels)
+    idx = np.where(channels == search_on)[0][0]
+    image = utils.to_uint8(images[idx])
     min_button_dist = round(min(row_dist, col_dist) / 2)
+    if min_button_dist % 2 == 0:
+        min_button_dist -= 1
 
     # Step 1: Find an imperfect button mask by thresholding.
     mask = cv.adaptiveThreshold(
@@ -94,7 +101,13 @@ def find_buttons(
     ) / (1 - row_slope * col_slope)
     button_pos[:, :, 1] = button_pos[:, :, 0] * col_slope + col_intercepts[np.newaxis]
 
-    return button_pos
+    assay = Assay()
+    assay.type = "chip"
+    assay.channels = channels
+    assay.images = images
+    assay.centers = button_pos
+
+    return assay
 
 
 def cluster_1d(
@@ -130,7 +143,8 @@ def cluster_1d(
         return np.sum(cost), spans
 
     spans = min(
-        cost(i) for i in range(total_length - round(num_clusters * cluster_length))
+        (cost(i) for i in range(total_length - round(num_clusters * cluster_length))),
+        key=lambda x: x[0],
     )[1]
 
     # Label each point with its cluster, label points outside clusters as -1.

@@ -7,17 +7,19 @@ from magnify.assay import Assay
 
 
 def segment_buttons(
-    assay: Assay, subimage_length: int = 61, min_button_radius=4, max_button_radius=15
+    assay: Assay,
+    subimage_length: int = 61,
+    min_button_radius: int = 4,
+    max_button_radius: int = 15,
+    search_on: str = "egfp",
 ) -> Assay:
     num_rows, num_cols = assay.centers.shape[:2]
-    if assay.images.ndim == 2:
-        image = assay.images
-    else:
-        image = assay.images[0]
+    channel_idx = np.where(assay.channels == search_on)[0][0]
 
     # Create the array of subimage regions.
     assay.regions = np.empty(
-        (num_rows, num_cols, subimage_length, subimage_length), dtype=image.dtype
+        (len(assay.channels), num_rows, num_cols, subimage_length, subimage_length),
+        dtype=assay.images.dtype,
     )
     assay.offsets = np.empty((num_rows, num_cols, 2), dtype=int)
     for i in range(num_rows):
@@ -27,7 +29,7 @@ def segment_buttons(
                 round(assay.centers[i, j, 1]),
                 subimage_length,
             )
-            assay.regions[i, j] = image[top:bottom, left:right]
+            assay.regions[:, i, j] = assay.images[:, top:bottom, left:right]
             assay.offsets[i, j] = top, left
 
     # Compute the foreground and background masks for all buttons.
@@ -35,7 +37,7 @@ def segment_buttons(
     assay.bg = ma.array(assay.regions, copy=False)
     for i in range(num_rows):
         for j in range(num_cols):
-            subimage = utils.to_uint8(assay.regions[i, j])
+            subimage = utils.to_uint8(assay.regions[channel_idx, i, j])
             # Filter the subimage to smooth edges and remove noise.
             filtered = cv.bilateralFilter(
                 subimage,
@@ -65,13 +67,9 @@ def segment_buttons(
                 closest_idx = np.argmin(
                     np.linalg.norm(circles - assay.centers[i, j], axis=1)
                 )
-                assay.centers[i, j] = (
-                    circles[closest_idx] + assay.offsets[i, j]
-                )
+                assay.centers[i, j] = circles[closest_idx] + assay.offsets[i, j]
 
-            center = (
-                np.round(assay.centers[i, j]).astype(int) - assay.offsets[i, j]
-            )
+            center = np.round(assay.centers[i, j]).astype(int) - assay.offsets[i, j]
 
             # Set the foreground (the button) to be a circle of fixed radius.
             fg_mask = utils.circle(
@@ -110,7 +108,7 @@ def segment_buttons(
             if np.any(bg_mask & dim_mask):
                 bg_mask &= dim_mask
 
-            assay.fg[i, j, ~fg_mask] = ma.masked
-            assay.bg[i, j, ~bg_mask] = ma.masked
+            assay.fg[:, i, j, ~fg_mask] = ma.masked
+            assay.bg[:, i, j, ~bg_mask] = ma.masked
 
     return assay

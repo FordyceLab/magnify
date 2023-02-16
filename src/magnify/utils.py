@@ -1,4 +1,7 @@
+from collections.abc import Callable
 from numbers import Number
+from typing import Any
+import inspect
 
 import cv2 as cv
 import numpy as np
@@ -27,3 +30,8 @@ def bounding_box(row: int, col: int, box_length: int):
     left = col - box_length // 2
     right = col + ceildiv(box_length, 2)
     return top, bottom, left, right
+
+
+def valid_kwargs(kwargs: dict[str, Any], func: Callable):
+    args = list(inspect.signature(func).parameters)
+    return {k: kwargs[k] for k in kwargs if k in args}
