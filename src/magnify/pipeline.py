@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 import numpy as np
+import numpy.ma as ma
 import tifffile
 import tqdm
 
@@ -38,25 +39,23 @@ def pipe(
         images = np.array(images)
         a = magnify.find_buttons(images, channels, search_on=search_on, **find_kwargs)
         a = magnify.segment_buttons(a, search_on=search_on, **segment_kwargs)
-        if drop_images:
-            a.images = None
         assays.append(a)
 
     if not drop_images:
-        assay.images = np.concatenate([a.images for a in assays])
-    assay.regions = np.concatenate([a.regions for a in assays])
-    assay.offsets = np.concatenate([a.offsets for a in assays])
-    assay.centers = np.concatenate([a.centers for a in assays])
+        assay.images = np.concatenate([a.images[np.newaxis] for a in assays])
+    assay.regions = np.concatenate([a.regions[np.newaxis] for a in assays])
+    assay.offsets = np.concatenate([a.offsets[np.newaxis] for a in assays])
+    assay.centers = np.concatenate([a.centers[np.newaxis] for a in assays])
     assay.fg = ma.array(
         assay.regions,
-        mask=np.concatenate([ma.getmask(a.fg) for a in assays]),
+        mask=np.concatenate([ma.getmask(a.fg)[np.newaxis] for a in assays]),
         copy=False,
     )
     assay.bg = ma.array(
         assay.regions,
-        mask=np.concatenate([ma.getmask(a.fg) for a in assays]),
+        mask=np.concatenate([ma.getmask(a.bg)[np.newaxis] for a in assays]),
         copy=False,
     )
-    assay.valid = np.concatenate([a.valid for a in assays])
+    assay.valid = np.concatenate([a.valid[np.newaxis] for a in assays])
 
     return assay

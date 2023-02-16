@@ -106,6 +106,7 @@ def find_buttons(
     assay.channels = channels
     assay.images = images
     assay.centers = button_pos
+    assay.valid = np.ones((len(channels), num_rows, num_cols), dtype=bool)
 
     return assay
 
