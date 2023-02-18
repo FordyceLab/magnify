@@ -6,6 +6,7 @@ class Assay:
     ids: np.ndarray
     times: np.ndarray
     channels: list[str]
+    info: dict
 
     images: np.ndarray
     regions: np.ndarray
