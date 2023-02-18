@@ -39,6 +39,8 @@ def pipe(
         images = np.array(images)
         a = magnify.find_buttons(images, channels, search_on=search_on, **find_kwargs)
         a = magnify.segment_buttons(a, search_on=search_on, **segment_kwargs)
+        if drop_images:
+            a.images = None
         assays.append(a)
 
     if not drop_images:
