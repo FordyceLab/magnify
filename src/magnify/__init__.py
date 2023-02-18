@@ -1,4 +1,4 @@
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 from magnify.assay import Assay
 from magnify.find import find_buttons
