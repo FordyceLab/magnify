@@ -17,13 +17,13 @@ class Assay:
 
     # The images acquired for this assay.
     # This is a num_times x num_channels x image_height x image_width array.
-    images: np.ndarray
+    images: np.ndarray | None
     # The center of each item in row-col coordinates.
     # This is a num_times x num_channels x num_items x 2 array.
     centers: np.ndarray
     # Subsets of the images array that contains items
     regions: np.ndarray
-    # The row/column offsets of each region in the 
+    # The row/column offsets of each region in the
     offsets: np.ndarray
 
     fg: np.ndarray

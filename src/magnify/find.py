@@ -46,9 +46,7 @@ def find_buttons(
         kernel=np.ones((2 * max_button_radius, 2 * max_button_radius)),
     )
     # Remove small blobs.
-    mask = cv.erode(
-        mask, kernel=np.ones((2 * min_button_radius, 2 * min_button_radius))
-    )
+    mask = cv.erode(mask, kernel=np.ones((2 * min_button_radius, 2 * min_button_radius)))
 
     # Step 2: Get all connected components and filter out ones too close to each other.
     points = cv.connectedComponentsWithStats(mask, connectivity=4)[3]
@@ -124,7 +122,7 @@ def cluster_1d(
     permutation = np.argsort(points)
     points = points[permutation]
 
-    def cost(offset):
+    def cost(offset: int) -> tuple[float, np.ndarray]:
         # Compute the boundaries and center of each cluster.
         boundaries = np.arange(num_clusters + 1) * cluster_length + offset
         centers = (boundaries[1:] + boundaries[:-1]) / 2
@@ -150,9 +148,7 @@ def cluster_1d(
 
     # Label each point with its cluster, label points outside clusters as -1.
     labels = -np.ones_like(points, dtype=int)
-    labels[spans[0] : spans[-1]] = np.repeat(
-        np.arange(num_clusters), spans[1:] - spans[:-1]
-    )
+    labels[spans[0] : spans[-1]] = np.repeat(np.arange(num_clusters), spans[1:] - spans[:-1])
 
     # Return the labels based on the original order of the points.
     return labels[np.argsort(permutation)]
@@ -164,20 +160,20 @@ def regress_clusters(
     # Find the best line per-cluster.
     slopes = np.full(num_clusters, np.nan)
     intercepts = np.full(num_clusters, np.nan)
-    points = [points[labels == i].T for i in range(num_clusters)]
-    for i, (y, x) in enumerate(points):
+    cluster_points = [points[labels == i].T for i in range(num_clusters)]
+    for i, (y, x) in enumerate(cluster_points):
         # Only regress on multi-point clusters.
         if len(x) > 1:
             slopes[i], intercepts[i], _, _, _ = scipy.stats.linregress(x, y)
         elif i == 0 or i == num_clusters - 1:
             logger.warning(
-                f"Boundary cluster only has less than 2 points."
+                "Boundary cluster only has less than 2 points."
                 "The chip is unlikely to be segmented correctly."
             )
 
     # Recompute the intercepts using the median slope.
     slope = np.nanmedian(slopes)
-    for i, (y, x) in enumerate(points):
+    for i, (y, x) in enumerate(cluster_points):
         if len(x) > 0:
             intercepts[i] = np.median(y - slope * x)
 
@@ -189,10 +185,8 @@ def regress_clusters(
     )
     # Re-estimate intercepts using a weighted mean of global and local estimates.
     # This reduces outlier effects while still allowing uneven intercepts from image stitching.
-    for i, (y, x) in enumerate(points):
+    for i, (y, x) in enumerate(cluster_points):
         weight = min(len(x), ideal_num_points) / ideal_num_points
-        intercepts[i] = weight * intercepts[i] + (1 - weight) * (
-            intercept_m * i + intercept_b
-        )
+        intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
 
     return slope, intercepts

@@ -13,6 +13,7 @@ def segment_buttons(
     max_button_radius: int = 15,
     search_on: str = "egfp",
 ) -> Assay:
+    assert isinstance(assay.images, np.ndarray)
     num_rows, num_cols = assay.centers.shape[:2]
     channel_idx = np.where(assay.channels == search_on)[0][0]
 
@@ -64,9 +65,7 @@ def segment_buttons(
                 # Change circle locations to use row-column indexing.
                 circles = circles[0, :, 1::-1]
                 # Use the circle center closest to our previous estimate of the button.
-                closest_idx = np.argmin(
-                    np.linalg.norm(circles - assay.centers[i, j], axis=1)
-                )
+                closest_idx = np.argmin(np.linalg.norm(circles - assay.centers[i, j], axis=1))
                 assay.centers[i, j] = circles[closest_idx] + assay.offsets[i, j]
 
             center = np.round(assay.centers[i, j]).astype(int) - assay.offsets[i, j]
@@ -94,9 +93,7 @@ def segment_buttons(
             _, bright_mask = cv.threshold(
                 subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
             )
-            dim_mask = ~cv.dilate(
-                bright_mask, np.ones((max_button_radius, max_button_radius))
-            )
+            dim_mask = ~cv.dilate(bright_mask, np.ones((max_button_radius, max_button_radius)))
             bright_mask = bright_mask.astype(bool)
             dim_mask = dim_mask.astype(bool)
 
