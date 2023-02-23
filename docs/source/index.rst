@@ -2,6 +2,12 @@
    sphinx-quickstart on Wed Feb 22 12:01:48 2023.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
+.. toctree::
+   :maxdepth: 1
+   :caption: API:
+
+   assay
+
 
 Magnify: Image Processing for Microfluidics
 ===========================================
@@ -42,10 +48,6 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
 
 
 
