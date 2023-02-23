@@ -23,6 +23,8 @@ black = ">=22.6.0"
 mypy = ">=1.0.1"
 pytest = ">=7.1.2"
 ruff = ">=0.0.249"
+sphinx = ">=5.0.2"
+sphinx-press-theme = ">=0.8.0"
 
 [build-system]
 requires = ["poetry-core"]
