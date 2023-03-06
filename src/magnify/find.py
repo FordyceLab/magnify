@@ -39,19 +39,25 @@ def find_buttons(
         blockSize=min_button_dist,
         C=-1,
     )
-    # Remove large blobs.
-    mask = cv.morphologyEx(
-        mask,
-        op=cv.MORPH_TOPHAT,
-        kernel=np.ones((2 * max_button_radius, 2 * max_button_radius)),
-    )
-    # Remove small blobs.
-    mask = cv.erode(mask, kernel=np.ones((2 * min_button_radius, 2 * min_button_radius)))
 
-    # Step 2: Get all connected components and filter out ones too close to each other.
+    # Step 2: Get all connected components and filter out some of them.
     points = cv.connectedComponentsWithStats(mask, connectivity=4)[3]
+    _, _, stats, points = cv.connectedComponentsWithStats(mask, connectivity=4)
+
     # Ignore the background point and change indexing to be in row-col order.
     points = points[1:, ::-1]
+    stats = stats[1:]
+    # Exclude large blobs.
+    points = points[
+        (stats[:, cv.CC_STAT_HEIGHT] <= 2 * max_button_radius)
+        & (stats[:, cv.CC_STAT_WIDTH] <= 2 * max_button_radius)
+    ]
+    # Exclude small blobs.
+    points = points[
+        (stats[:, cv.CC_STAT_HEIGHT] >= 2 * min_button_radius)
+        & (stats[:, cv.CC_STAT_WIDTH] >= 2 * min_button_radius)
+    ]
+    # Remove points too close to other points.
     dist_matrix = np.linalg.norm(points[np.newaxis] - points[:, np.newaxis], axis=2)
     dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
     points = points[np.min(dist_matrix, axis=0) > min_button_dist]
@@ -148,7 +154,9 @@ def cluster_1d(
 
     # Label each point with its cluster, label points outside clusters as -1.
     labels = -np.ones_like(points, dtype=int)
-    labels[spans[0] : spans[-1]] = np.repeat(np.arange(num_clusters), spans[1:] - spans[:-1])
+    labels[spans[0] : spans[-1]] = np.repeat(
+        np.arange(num_clusters), spans[1:] - spans[:-1]
+    )
 
     # Return the labels based on the original order of the points.
     return labels[np.argsort(permutation)]
@@ -187,6 +195,8 @@ def regress_clusters(
     # This reduces outlier effects while still allowing uneven intercepts from image stitching.
     for i, (y, x) in enumerate(cluster_points):
         weight = min(len(x), ideal_num_points) / ideal_num_points
-        intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
+        intercepts[i] = weight * intercepts[i] + (1 - weight) * (
+            intercept_m * i + intercept_b
+        )
 
     return slope, intercepts
