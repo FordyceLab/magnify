@@ -1,31 +1,58 @@
 import numpy as np
 
 
+class Marker:
+    def __init__(self, name, x, y, region, fg_mask, bg_mask):
+        
+
+
+
 class Assay:
-    # The type of assay that we imaged can be "bead" or "chip".
-    # In a chip assay the items we are imaging are buttons, whereas
-    # in a bead assay we are imaging beads.
-    type: str
-    # The names of each item. Names do not have to be unique.
-    # This is a num_row x num_col array for chip assays,
-    # and a num_item array for bead assays.
-    names: np.ndarray
-    # The time in seconds at which each image was taken.
-    times: np.ndarray
-    # The channels each image was acquired in.
-    channels: np.ndarray
+    def __init__(self, images: ArrayLike, names: ArrayLike, times: ArrayLike, channels: ArrayLike, region_height=60, region_width=60):
+        self.images: np.ndarray | None = np.asarray(images)
+        self.names: np.ndarray = np.asarray(names)
+        self.times: np.ndarray = np.asarray(times)
+        self.channels: np.ndarray = np.asarray(channels)
+        self.markers: list[Marker]
+        assert self.images.ndim >= 4 and self.images.ndim <= 6
 
-    # The images acquired for this assay.
-    # This is a num_times x num_channels x image_height x image_width array.
-    images: np.ndarray | None
-    # The center of each item in row-col coordinates.
-    # This is a num_times x num_channels x num_items x 2 array.
-    centers: np.ndarray
-    # Subsets of the images array that contains items
-    regions: np.ndarray
-    # The row/column offsets of each region in the
-    offsets: np.ndarray
+        self.valid: np.ndarray | None = None
+        self.centers: np.ndarray | None = None
 
-    fg: np.ndarray
-    bg: np.ndarray
-    valid: np.ndarray
+        self.offsets: np.ndarray | None = None
+        self.regions: np.ndarray | None = None
+        self.fg_mask: np.ndarray | None = None
+        self.bg_mask: np.ndarray | None = None
+
+        self.intensity: 
+
+    @property
+    def dims(self) -> str:
+        if self.regions :
+            "IJTCYX"
+        else:
+            "ITCYX"
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self.names.shape + self.images.shape[1:]
+
+    def intensities(self, time: int, channel: int | str, ) -> np.ndarray:
+        """Return the intensities of each item in the given channel."""
+        pass
+
+    @property
+    def median(self, t: int, c: int | str, i: int | str, j: int) -> np.ndarray:
+        """The median value for the given channel and time."""
+        pass
+
+def concatenate(assays: Sequence[Assay], axis: int | str = 0) -> Assay:
+    """Concatenate the given assays into a single assay.
+    
+    # The assays must have the same type, channels, and names.
+    # The times and images arrays will be concatenated.
+    # The centers and regions arrays will be concatenated,
+    # and the offsets will be adjusted to account for the
+    # concatenation.
+    """
+    pass
