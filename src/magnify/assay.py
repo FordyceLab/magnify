@@ -1,34 +1,70 @@
+from __future__ import annotations
+from typing import Sequence
+
 import numpy as np
 
 
-class Marker:
-    def __init__(self, name, x, y, region, fg_mask, bg_mask):
-        
-
-
-
 class Assay:
-    def __init__(self, images: ArrayLike, names: ArrayLike, times: ArrayLike, channels: ArrayLike, region_height=60, region_width=60):
-        self.images: np.ndarray | None = np.asarray(images)
-        self.names: np.ndarray = np.asarray(names)
-        self.times: np.ndarray = np.asarray(times)
-        self.channels: np.ndarray = np.asarray(channels)
-        self.markers: list[Marker]
+    def __init__(
+        self,
+        num_marker_dims: int,
+        times: np.ndarray,
+        channels: np.ndarray,
+        images: np.ndarray | None = None,
+        names: np.ndarray | None = None,
+        valid: np.ndarray | None = None,
+        centers: np.ndarray | None = None,
+        regions: np.ndarray | None = None,
+        fg_mask: np.ndarray | None = None,
+        bg_mask: np.ndarray | None = None,
+    ):
+        # Assay metadata.
+        self.num_marker_dims = num_marker_dims
+        self.times = times
+        self.channels = channels
+        if names is not None:
+            self.names = names
+        else:
+            self.names = np.empty((0,) * self.num_marker_dims)
+
+        # Raw image data.
+        if images is not None:
+            self.images = images
+        else:
+            self.images = np.empty((len(self.times), len(self.channels), 0, 0))
         assert self.images.ndim >= 4 and self.images.ndim <= 6
 
-        self.valid: np.ndarray | None = None
-        self.centers: np.ndarray | None = None
+        # Marker data.
+        if valid is not None:
+            self.valid = valid
+        else:
+            self.valid = np.ones(
+                self.names.shape + (len(self.times), len(self.channels)), dtype=bool
+            )
 
-        self.offsets: np.ndarray | None = None
-        self.regions: np.ndarray | None = None
-        self.fg_mask: np.ndarray | None = None
-        self.bg_mask: np.ndarray | None = None
+        if centers is not None:
+            self.centers = centers
+        else:
+            self.centers = np.zeros(self.names.shape + (len(self.times), 2))
 
-        self.intensity: 
+        if regions is not None:
+            self.regions = regions
+        else:
+            self.regions = np.empty(self.names.shape + (len(self.times), len(self.channels), 0, 0))
+
+        if fg_mask is not None:
+            self.fg_mask = fg_mask
+        else:
+            self.fg_mask = np.zeros(self.regions.shape, dtype=bool)
+
+        if bg_mask is not None:
+            self.bg_mask = bg_mask
+        else:
+            self.bg_mask = np.zeros(self.regions.shape, dtype=bool)
 
     @property
     def dims(self) -> str:
-        if self.regions :
+        if self.regions:
             "IJTCYX"
         else:
             "ITCYX"
@@ -37,7 +73,11 @@ class Assay:
     def shape(self) -> tuple[int, ...]:
         return self.names.shape + self.images.shape[1:]
 
-    def intensities(self, time: int, channel: int | str, ) -> np.ndarray:
+    def intensities(
+        self,
+        time: int,
+        channel: int | str,
+    ) -> np.ndarray:
         """Return the intensities of each item in the given channel."""
         pass
 
@@ -46,13 +86,18 @@ class Assay:
         """The median value for the given channel and time."""
         pass
 
-def concatenate(assays: Sequence[Assay], axis: int | str = 0) -> Assay:
-    """Concatenate the given assays into a single assay.
-    
-    # The assays must have the same type, channels, and names.
-    # The times and images arrays will be concatenated.
-    # The centers and regions arrays will be concatenated,
-    # and the offsets will be adjusted to account for the
-    # concatenation.
-    """
-    pass
+    @staticmethod
+    def from_assays(assays: Sequence[Assay]) -> Assay:
+        """Concatenate the given assays into a single assay along the time dimension."""
+        return Assay(
+            num_marker_dims=assays[0].num_marker_dims,
+            times=np.concatenate([a.times for a in assays]),
+            channels=assays[0].channels,
+            images=np.concatenate([a.images for a in assays], axis=0),
+            names=assays[0].names,
+            valid=np.concatenate([a.valid for a in assays], axis=-2),
+            centers=np.concatenate([a.centers for a in assays], axis=-2),
+            regions=np.concatenate([a.regions for a in assays], axis=-4),
+            fg_mask=np.concatenate([a.fg_mask for a in assays], axis=-4),
+            bg_mask=np.concatenate([a.bg_mask for a in assays], axis=-4),
+        )

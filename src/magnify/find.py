@@ -154,9 +154,7 @@ def cluster_1d(
 
     # Label each point with its cluster, label points outside clusters as -1.
     labels = -np.ones_like(points, dtype=int)
-    labels[spans[0] : spans[-1]] = np.repeat(
-        np.arange(num_clusters), spans[1:] - spans[:-1]
-    )
+    labels[spans[0] : spans[-1]] = np.repeat(np.arange(num_clusters), spans[1:] - spans[:-1])
 
     # Return the labels based on the original order of the points.
     return labels[np.argsort(permutation)]
@@ -195,8 +193,6 @@ def regress_clusters(
     # This reduces outlier effects while still allowing uneven intercepts from image stitching.
     for i, (y, x) in enumerate(cluster_points):
         weight = min(len(x), ideal_num_points) / ideal_num_points
-        intercepts[i] = weight * intercepts[i] + (1 - weight) * (
-            intercept_m * i + intercept_b
-        )
+        intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
 
     return slope, intercepts
