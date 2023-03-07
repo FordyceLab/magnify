@@ -19,7 +19,7 @@ def load(name: str):
 
 def chip_pipeline():
     pipe = Pipeline("chip_reader")
-    # pipe.add_pipe("image_correcter")
+    pipe.add_pipe("preprocessor")
     # pipe.add_pipe("button_finder")
     # pipe.add_pipe("button_segmenter")
     # pipe.add_pipe("button_classifier")

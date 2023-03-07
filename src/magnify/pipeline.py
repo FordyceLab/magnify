@@ -21,7 +21,7 @@ class Pipeline:
     ) -> Assay:
         assays = []
         for assay in self.reader(data=data, names=names, times=times, channels=channels):
-            for component in self.components:
+            for name, component in self.components:
                 assay = component(assay)
             assays.append(assay)
 
