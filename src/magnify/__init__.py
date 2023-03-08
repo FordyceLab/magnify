@@ -6,5 +6,7 @@ __all__ = [
 ]
 from magnify.assay import Assay
 from magnify.registry import load
+import magnify.find
 import magnify.preprocess
 import magnify.reader
+import magnify.stitch

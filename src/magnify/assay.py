@@ -10,6 +10,7 @@ class Assay:
         num_marker_dims: int,
         times: np.ndarray,
         channels: np.ndarray,
+        search_channel: str,
         images: np.ndarray | None = None,
         names: np.ndarray | None = None,
         valid: np.ndarray | None = None,
@@ -22,6 +23,7 @@ class Assay:
         self.num_marker_dims = num_marker_dims
         self.times = times
         self.channels = channels
+        self.search_channel = search_channel
         if names is not None:
             self.names = names
         else:
@@ -93,6 +95,7 @@ class Assay:
             num_marker_dims=assays[0].num_marker_dims,
             times=np.concatenate([a.times for a in assays]),
             channels=assays[0].channels,
+            search_channel=assays[0].search_channel,
             images=np.concatenate([a.images for a in assays], axis=0),
             names=assays[0].names,
             valid=np.concatenate([a.valid for a in assays], axis=-2),

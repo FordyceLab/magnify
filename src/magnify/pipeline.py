@@ -16,11 +16,14 @@ class Pipeline:
         self,
         data: ArrayLike | str,
         names: ArrayLike | str,
+        search_on: str = "egfp",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Assay:
         assays = []
-        for assay in self.reader(data=data, names=names, times=times, channels=channels):
+        for assay in self.reader(
+            data=data, names=names, search_on=search_on, times=times, channels=channels
+        ):
             for name, component in self.components:
                 assay = component(assay)
             assays.append(assay)

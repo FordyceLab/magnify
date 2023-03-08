@@ -20,3 +20,12 @@ class Preprocessor:
     @staticmethod
     def make():
         return Preprocessor()
+
+
+@registry.components.register("horizontal_flip")
+def make_horizontal_flip():
+    def horizontal_flip(assay: Assay):
+        assay.images = np.flip(assay.images, axis=-1)
+        return assay
+
+    return horizontal_flip

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 
 from numpy.typing import ArrayLike
@@ -7,112 +8,122 @@ import scipy
 
 from magnify import utils
 from magnify.assay import Assay
+import magnify.registry as registry
 
 logger = logging.getLogger(__name__)
 
 
-def find_buttons(
-    images: np.ndarray,
-    channels: ArrayLike,
-    num_rows: int = 46,
-    num_cols: int = 24,
-    row_dist: float = 126.3,
-    col_dist: float = 233.2,
-    min_button_radius: int = 4,
-    max_button_radius: int = 15,
-    cluster_penalty: float = 10,
-    search_on: str = "egfp",
-) -> Assay:
-    channels = np.array(channels)
-    idx = np.where(channels == search_on)[0][0]
-    image = utils.to_uint8(images[idx])
-    min_button_dist = round(min(row_dist, col_dist) / 2)
-    if min_button_dist % 2 == 0:
-        min_button_dist -= 1
+class ButtonFinder:
+    def __init__(
+        self,
+        row_dist: float = 126.3,
+        col_dist: float = 233.2,
+        min_button_radius: int = 4,
+        max_button_radius: int = 15,
+        cluster_penalty: float = 10,
+    ):
+        self.row_dist = row_dist
+        self.col_dist = col_dist
+        self.min_button_radius = min_button_radius
+        self.max_button_radius = max_button_radius
+        self.cluster_penalty = cluster_penalty
 
-    # Step 1: Find an imperfect button mask by thresholding.
-    mask = cv.adaptiveThreshold(
-        image,
-        maxValue=255,
-        adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-        thresholdType=cv.THRESH_BINARY,
-        blockSize=min_button_dist,
-        C=-1,
-    )
+    def __call__(self, assay: Assay) -> Assay:
+        num_rows, num_cols = assay.names.shape
+        idx = np.where(assay.channels == assay.search_channel)[0][0]
+        image = utils.to_uint8(assay.images[0, idx])
+        min_button_dist = round(min(self.row_dist, self.col_dist) / 2)
+        if min_button_dist % 2 == 0:
+            # Certain opencv functions require an odd blocksize.
+            min_button_dist -= 1
 
-    # Step 2: Get all connected components and filter out some of them.
-    points = cv.connectedComponentsWithStats(mask, connectivity=4)[3]
-    _, _, stats, points = cv.connectedComponentsWithStats(mask, connectivity=4)
+        # Step 1: Find an imperfect button mask by thresholding.
+        mask = cv.adaptiveThreshold(
+            image,
+            maxValue=255,
+            adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+            thresholdType=cv.THRESH_BINARY,
+            blockSize=min_button_dist,
+            C=-1,
+        )
 
-    # Ignore the background point and change indexing to be in row-col order.
-    points = points[1:, ::-1]
-    stats = stats[1:]
-    # Exclude large blobs.
-    points = points[
-        (stats[:, cv.CC_STAT_HEIGHT] <= 2 * max_button_radius)
-        & (stats[:, cv.CC_STAT_WIDTH] <= 2 * max_button_radius)
-    ]
-    # Exclude small blobs.
-    points = points[
-        (stats[:, cv.CC_STAT_HEIGHT] >= 2 * min_button_radius)
-        & (stats[:, cv.CC_STAT_WIDTH] >= 2 * min_button_radius)
-    ]
-    # Remove points too close to other points.
-    dist_matrix = np.linalg.norm(points[np.newaxis] - points[:, np.newaxis], axis=2)
-    dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
-    points = points[np.min(dist_matrix, axis=0) > min_button_dist]
+        # Step 2: Get all connected components and filter out some of them.
+        points = cv.connectedComponentsWithStats(mask, connectivity=4)[3]
+        _, _, stats, points = cv.connectedComponentsWithStats(mask, connectivity=4)
 
-    # Step 3: Cluster the points into distinct rows and columns.
-    row_labels = cluster_1d(
-        points[:, 0],
-        total_length=image.shape[0],
-        num_clusters=num_rows,
-        cluster_length=row_dist,
-        ideal_num_points=num_cols,
-        penalty=cluster_penalty,
-    )
-    col_labels = cluster_1d(
-        points[:, 1],
-        total_length=image.shape[1],
-        num_clusters=num_cols,
-        cluster_length=col_dist,
-        ideal_num_points=num_rows,
-        penalty=cluster_penalty,
-    )
+        # Ignore the background point and change indexing to be in row-col order.
+        points = points[1:, ::-1]
+        stats = stats[1:]
+        # Exclude large and small blobs.
+        points = points[
+            (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
+            & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
+            & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
+            & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
+        ]
+        # Remove points too close to other points.
+        dist_matrix = np.linalg.norm(points[np.newaxis] - points[:, np.newaxis], axis=2)
+        dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
+        points = points[np.min(dist_matrix, axis=0) > min_button_dist]
 
-    # Exclude boundary points that didn't fall into clusters.
-    in_cluster = (row_labels >= 0) & (col_labels >= 0)
-    points = points[in_cluster]
-    col_labels = col_labels[in_cluster]
-    row_labels = row_labels[in_cluster]
+        import matplotlib.pyplot as plt
 
-    # Step 4: Draw lines through each cluster.
-    row_slope, row_intercepts = regress_clusters(
-        points, labels=row_labels, num_clusters=num_rows, ideal_num_points=num_cols
-    )
-    # We treat column indices as y and row indices as x to avoid near-infinite slopes.
-    col_slope, col_intercepts = regress_clusters(
-        points[:, ::-1],
-        labels=col_labels,
-        num_clusters=num_cols,
-        ideal_num_points=num_rows,
-    )
+        plt.imshow(mask)
+        plt.scatter(points[:, 1], points[:, 0], s=1)
+        plt.show()
+        print(points)
+        # Step 3: Cluster the points into distinct rows and columns.
+        row_labels = cluster_1d(
+            points[:, 0],
+            total_length=image.shape[0],
+            num_clusters=num_rows,
+            cluster_length=self.row_dist,
+            ideal_num_points=num_cols,
+            penalty=self.cluster_penalty,
+        )
+        col_labels = cluster_1d(
+            points[:, 1],
+            total_length=image.shape[1],
+            num_clusters=num_cols,
+            cluster_length=self.col_dist,
+            ideal_num_points=num_rows,
+            penalty=self.cluster_penalty,
+        )
 
-    # Step 5: Set button locations as the intersection of each line pair.
-    button_pos = np.empty((num_rows, num_cols, 2))
-    button_pos[:, :, 0] = (
-        row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]
-    ) / (1 - row_slope * col_slope)
-    button_pos[:, :, 1] = button_pos[:, :, 0] * col_slope + col_intercepts[np.newaxis]
+        # Exclude boundary points that didn't fall into clusters.
+        in_cluster = (row_labels >= 0) & (col_labels >= 0)
+        points = points[in_cluster]
+        col_labels = col_labels[in_cluster]
+        row_labels = row_labels[in_cluster]
 
-    assay = Assay()
-    assay.type = "chip"
-    assay.channels = channels
-    assay.images = images
-    assay.centers = button_pos
-    assay.valid = np.ones((len(channels), num_rows, num_cols), dtype=bool)
+        # Step 4: Draw lines through each cluster.
+        row_slope, row_intercepts = regress_clusters(
+            points, labels=row_labels, num_clusters=num_rows, ideal_num_points=num_cols
+        )
+        # We treat column indices as y and row indices as x to avoid near-infinite slopes.
+        col_slope, col_intercepts = regress_clusters(
+            points[:, ::-1],
+            labels=col_labels,
+            num_clusters=num_cols,
+            ideal_num_points=num_rows,
+        )
 
-    return assay
+        # Step 5: Set button locations as the intersection of each line pair.
+        button_pos = np.empty((num_rows, num_cols, 2))
+        button_pos[:, :, 0] = (
+            row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]
+        ) / (1 - row_slope * col_slope)
+        button_pos[:, :, 1] = button_pos[:, :, 0] * col_slope + col_intercepts[np.newaxis]
+
+        # Step 6: Set the assay's button positions, making sure to add a time index.
+        assay.centers = button_pos[:, :, np.newaxis, :]
+
+        return assay
+
+    @registry.components.register("button_finder")
+    @staticmethod
+    def make():
+        return ButtonFinder()
 
 
 def cluster_1d(

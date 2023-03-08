@@ -2,6 +2,7 @@ from __future__ import annotations
 import datetime
 import fnmatch
 import glob
+import os
 import re
 
 from numpy.typing import ArrayLike
@@ -22,10 +23,13 @@ class ChipReader:
         self,
         data: ArrayLike | str,
         names: ArrayLike | str,
+        search_on: str = "egfp",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Assay:
         if isinstance(data, str):
+            data = os.path.expanduser(data)
+
             regex_path = fnmatch.translate(data)
             regex_path = regex_path.replace("\\(time\\)", "(?P<time>.*?)")
             regex_path = regex_path.replace("\\(channel\\)", "(?P<channel>.*?)")
@@ -97,6 +101,7 @@ class ChipReader:
                 num_marker_dims=2,
                 times=np.array([time]),
                 channels=np.array(channels),
+                search_channel=search_on,
                 images=tiles,
                 names=names_array,
             )
@@ -114,7 +119,7 @@ def read_names(path):
     )
     # Zero-index the indices.
     cols, rows = np.array(df["Indices"].to_list()).T - 1
-    names = df["MutantID"].to_numpy()
+    names = df["MutantID"].to_numpy(dtype=str, na_value="")
     names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
     names_array[rows, cols] = names
     return names_array
