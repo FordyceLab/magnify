@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Sequence
 
 import numpy as np
+import numpy.ma as ma
 
 
 class Assay:
@@ -16,8 +17,8 @@ class Assay:
         valid: np.ndarray | None = None,
         centers: np.ndarray | None = None,
         regions: np.ndarray | None = None,
-        fg_mask: np.ndarray | None = None,
-        bg_mask: np.ndarray | None = None,
+        fg: np.ndarray | None = None,
+        bg: np.ndarray | None = None,
     ):
         # Assay metadata.
         self.num_marker_dims = num_marker_dims
@@ -54,15 +55,15 @@ class Assay:
         else:
             self.regions = np.empty(self.names.shape + (len(self.times), len(self.channels), 0, 0))
 
-        if fg_mask is not None:
-            self.fg_mask = fg_mask
+        if fg is not None:
+            self.fg = fg
         else:
-            self.fg_mask = np.zeros(self.regions.shape, dtype=bool)
+            self.fg = np.zeros(self.regions.shape, dtype=bool)
 
-        if bg_mask is not None:
-            self.bg_mask = bg_mask
+        if bg is not None:
+            self.bg = bg
         else:
-            self.bg_mask = np.zeros(self.regions.shape, dtype=bool)
+            self.bg = np.zeros(self.regions.shape, dtype=bool)
 
     @property
     def dims(self) -> str:
@@ -101,6 +102,6 @@ class Assay:
             valid=np.concatenate([a.valid for a in assays], axis=-2),
             centers=np.concatenate([a.centers for a in assays], axis=-2),
             regions=np.concatenate([a.regions for a in assays], axis=-4),
-            fg_mask=np.concatenate([a.fg_mask for a in assays], axis=-4),
-            bg_mask=np.concatenate([a.bg_mask for a in assays], axis=-4),
+            fg=ma.concatenate([a.fg for a in assays], axis=-4),
+            bg=ma.concatenate([a.bg for a in assays], axis=-4),
         )
