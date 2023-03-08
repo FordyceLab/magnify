@@ -66,27 +66,24 @@ class ButtonFinder:
         dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
         points = points[np.min(dist_matrix, axis=0) > min_button_dist]
 
-        import matplotlib.pyplot as plt
-
-        plt.imshow(mask)
-        plt.scatter(points[:, 1], points[:, 0], s=1)
-        plt.show()
-        print(points)
         # Step 3: Cluster the points into distinct rows and columns.
+        # The number of buttons we expect to see per row/col can vary if we have blank buttons.
+        points_per_row = (assay.names != "").sum(axis=1)
         row_labels = cluster_1d(
             points[:, 0],
             total_length=image.shape[0],
             num_clusters=num_rows,
             cluster_length=self.row_dist,
-            ideal_num_points=num_cols,
+            ideal_num_points=points_per_row,
             penalty=self.cluster_penalty,
         )
+        points_per_col = (assay.names != "").sum(axis=0)
         col_labels = cluster_1d(
             points[:, 1],
             total_length=image.shape[1],
             num_clusters=num_cols,
             cluster_length=self.col_dist,
-            ideal_num_points=num_rows,
+            ideal_num_points=points_per_col,
             penalty=self.cluster_penalty,
         )
 
@@ -98,14 +95,14 @@ class ButtonFinder:
 
         # Step 4: Draw lines through each cluster.
         row_slope, row_intercepts = regress_clusters(
-            points, labels=row_labels, num_clusters=num_rows, ideal_num_points=num_cols
+            points, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
         )
         # We treat column indices as y and row indices as x to avoid near-infinite slopes.
         col_slope, col_intercepts = regress_clusters(
             points[:, ::-1],
             labels=col_labels,
             num_clusters=num_cols,
-            ideal_num_points=num_rows,
+            ideal_num_points=points_per_col,
         )
 
         # Step 5: Set button locations as the intersection of each line pair.
@@ -131,7 +128,7 @@ def cluster_1d(
     total_length: int,
     num_clusters: int,
     cluster_length: float,
-    ideal_num_points: int,
+    ideal_num_points: np.ndarray,
     penalty: float,
 ) -> np.ndarray:
     # Find the best clustering using the accumulate ragged array trick.
@@ -172,7 +169,7 @@ def cluster_1d(
 
 
 def regress_clusters(
-    points: np.ndarray, labels: np.ndarray, num_clusters: int, ideal_num_points: int
+    points: np.ndarray, labels: np.ndarray, num_clusters: int, ideal_num_points: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     # Find the best line per-cluster.
     slopes = np.full(num_clusters, np.nan)
@@ -182,9 +179,9 @@ def regress_clusters(
         # Only regress on multi-point clusters.
         if len(x) > 1:
             slopes[i], intercepts[i], _, _, _ = scipy.stats.linregress(x, y)
-        elif i == 0 or i == num_clusters - 1:
+        elif (i == 0 or i == num_clusters - 1) and ideal_num_points[i] >= 2:
             logger.warning(
-                "Boundary cluster only has less than 2 points."
+                "Boundary cluster has fewer than 2 points."
                 "The chip is unlikely to be segmented correctly."
             )
 
@@ -203,7 +200,11 @@ def regress_clusters(
     # Re-estimate intercepts using a weighted mean of global and local estimates.
     # This reduces outlier effects while still allowing uneven intercepts from image stitching.
     for i, (y, x) in enumerate(cluster_points):
-        weight = min(len(x), ideal_num_points) / ideal_num_points
-        intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
+        if ideal_num_points[i] != 0 and not_nan[i]:
+            weight = min(len(x), ideal_num_points[i]) / ideal_num_points[i]
+            intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
+        else:
+            # Just use our global estimate when we have an cluster.
+            intercepts[i] = intercept_m * i + intercept_b
 
     return slope, intercepts
