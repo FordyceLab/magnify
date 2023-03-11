@@ -48,7 +48,6 @@ class ButtonFinder:
         )
 
         # Step 2: Get all connected components and filter out some of them.
-        points = cv.connectedComponentsWithStats(mask, connectivity=4)[3]
         _, _, stats, points = cv.connectedComponentsWithStats(mask, connectivity=4)
 
         # Ignore the background point and change indexing to be in row-col order.
@@ -151,8 +150,10 @@ def cluster_1d(
         cost[num_points > 0] /= num_points[num_points > 0]
         # Set empty clusters to the maximum variance.
         cost[num_points == 0] = np.max(cost)
+        # Fewer points in a cluster means noisier variances so adjust variance contributions.
+        cost *= np.sqrt(ideal_num_points)
         # Penalize clusters for having too few or too many points.
-        cost += penalty * (ideal_num_points - num_points) ** 2
+        cost = cost + penalty * (ideal_num_points - num_points) ** 2
         return np.sum(cost), spans
 
     spans = min(
