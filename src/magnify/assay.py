@@ -25,6 +25,8 @@ class Assay:
         self.times = times
         self.channels = channels
         self.search_channel = search_channel
+        self.images_mmaped = False
+        self.regions_mmaped = False
         if names is not None:
             self.names = names
         else:
@@ -65,29 +67,15 @@ class Assay:
         else:
             self.bg = np.zeros(self.regions.shape, dtype=bool)
 
-    @property
-    def dims(self) -> str:
-        if self.regions:
-            "IJTCYX"
-        else:
-            "ITCYX"
+        self.intensities = np.empty(self.regions.shape[-2:])
 
-    @property
-    def shape(self) -> tuple[int, ...]:
-        return self.names.shape + self.images.shape[1:]
+    def drop_images(self) -> None:
+        """Drop the images from the assay."""
+        self.images = np.empty((len(self.times), len(self.channels), 0, 0))
 
-    def intensities(
-        self,
-        time: int,
-        channel: int | str,
-    ) -> np.ndarray:
-        """Return the intensities of each item in the given channel."""
-        pass
-
-    @property
-    def median(self, t: int, c: int | str, i: int | str, j: int) -> np.ndarray:
-        """The median value for the given channel and time."""
-        pass
+    def drop_regions(self) -> None:
+        """Drop the regions from the assay."""
+        self.regions = np.empty(self.names.shape + (len(self.times), len(self.channels), 0, 0))
 
     @staticmethod
     def from_assays(assays: Sequence[Assay]) -> Assay:

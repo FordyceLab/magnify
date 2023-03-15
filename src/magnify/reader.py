@@ -112,6 +112,45 @@ class ChipReader:
         return ChipReader()
 
 
+class BeadReader:
+    def __init__(self) -> None:
+        pass
+
+    def __call__(
+        self,
+        data: ArrayLike | str,
+        names: ArrayLike | str,
+        search_on: str = "open",
+        times: Sequence[int] | None = None,
+        channels: Sequence[str] | None = None,
+    ) -> Assay:
+        with tifffile.TiffFile(data) as tif:
+            dims = tif.series[0].axes
+            if "T" in dims:
+                raise ValueError("ome.tiff files with a time dimension are not yet supported.")
+            if times is None:
+                times = [0]
+            if channels is None:
+                if "C" in dims and channels is None:
+                    channels = tif.micromanager_metadata["Summary"]["ChNames"]
+            if "Z" in dims:
+                raise ValueError("ome.tiff files with a Z dimension are not yet supported.")
+            if "X" not in dims or "Y" not in dims:
+                raise ValueError("ome.tiff files must contain an X and Y dimension.")
+            yield Assay(
+                num_marker_dims=1,
+                times=np.array(times),
+                channels=np.array(channels),
+                search_channel=search_on,
+                images=tif.asarray()[np.newaxis],
+            )
+
+    @registry.readers.register("bead_reader")
+    @staticmethod
+    def make():
+        return BeadReader()
+
+
 def read_names(path):
     df = pd.read_csv(path)
     df["Indices"] = df["Indices"].apply(
