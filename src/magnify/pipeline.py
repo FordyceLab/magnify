@@ -20,12 +20,12 @@ class Pipeline:
         search_on: str = "egfp",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
-        progress_bar: bool = False
+        progress_bar: bool = False,
     ) -> Assay:
         assays = []
-        for assay in tqdm.tqdm(self.reader(
-            data=data, names=names, search_on=search_on, times=times, channels=channels
-        )):
+        for assay in tqdm.tqdm(
+            self.reader(data=data, names=names, search_on=search_on, times=times, channels=channels)
+        ):
             for name, component in self.components:
                 assay = component(assay)
             assays.append(assay)
