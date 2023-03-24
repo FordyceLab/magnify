@@ -48,5 +48,4 @@ def bounding_box(
 
 def valid_kwargs(kwargs: dict[str, Any], func: Callable) -> dict[str, Any]:
     args = list(inspect.signature(func).parameters)
-    print(args)
     return {k: kwargs[k] for k in kwargs if k in args}

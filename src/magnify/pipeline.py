@@ -30,9 +30,6 @@ class Pipeline:
         assays = []
         for assay in tqdm.tqdm(inputs, disable=not progress_bar):
             for name, component in self.components:
-                print(component)
-                print(kwargs)
-                print(utils.valid_kwargs(kwargs, component))
                 assay = component(assay, **utils.valid_kwargs(kwargs, component))
 
             assays.append(assay)
