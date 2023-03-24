@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import numpy as np
+import xarray as xr
 
-from magnify.assay import Assay
 from magnify.registry import components
 
 
@@ -10,18 +9,26 @@ class Stitcher:
     def __init__(self, overlap: int = 102):
         self.overlap = overlap
 
-    def __call__(self, assay: Assay) -> Assay:
-        tiles = assay.images[..., : -self.overlap, : -self.overlap]
+    def __call__(self, assay: xr.Dataset) -> xr.Dataset:
+        if "tile_row" not in assay.dims and "tile_col" not in assay.dims:
+            return assay
+        elif "tile_row" not in assay.dims:
+            assay = assay.expand_dims("tile_row", 2)
+        elif "tile_col" not in assay.dims:
+            assay = assay.expand_dims("tile_col", 3)
+
+        tiles = assay.image[..., : -self.overlap, : -self.overlap]
         # Move the time and channel axes last so we can focus on joining images.
-        tiles = np.transpose(tiles, axes=(2, 3, 4, 5, 0, 1))
-        # Concatenate rows, the axis corresponding to image rows is one less than usual since
-        # numpy only starts counting from the axis at index 1 in the input array.
-        tiles = np.concatenate(tiles, axis=1)
-        # Concatenate columns. Now the image column axis is two less than usual since we've
-        # also removed one axis with our last concatenation.
-        tiles = np.concatenate(tiles, axis=1)
+        tiles = tiles.transpose("tile_row", "tile_col", "im_row", "im_col", "channel", "time")
+        tiles = xr.concat(tiles, dim="im_row")
+        images = xr.concat(tiles, dim="im_col")
         # Move the time and channel axes back to the front.
-        assay.images = np.transpose(tiles, axes=(2, 3, 0, 1))
+        images = images.transpose("channel", "time", "im_row", "im_col")
+        assay = xr.Dataset(
+            {"image": images},
+            coords=assay.coords,
+            attrs={"search_channel": assay.search_channel},
+        )
         return assay
 
     @components.register("stitcher")

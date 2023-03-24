@@ -10,7 +10,7 @@ readers = catalogue.create("magnify", "readers")
 components = catalogue.create("magnify", "components")
 
 
-def load(name: str):
+def load(name: str) -> Pipeline:
     if name == "chip":
         return chip_pipeline()
     elif name == "mrbles":
@@ -22,7 +22,7 @@ def load(name: str):
 
 
 def chip_pipeline():
-    pipe = Pipeline("chip_reader")
+    pipe = Pipeline("reader")
     pipe.add_pipe("preprocessor")
     pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitcher")
@@ -34,7 +34,8 @@ def chip_pipeline():
 
 
 def mrbles_pipeline():
-    pipe = Pipeline("bead_reader")
+    pipe = Pipeline("reader")
+    pipe.add_pipe("stitcher")
     pipe.add_pipe("bead_finder")
     # pipe.add_pipe("background_filter")
 

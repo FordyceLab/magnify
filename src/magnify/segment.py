@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import cv2 as cv
 import numpy as np
-import numpy.ma as ma
+import xarray as xr
 
 from magnify import utils
-from magnify.assay import Assay
 from magnify.registry import components
 
 
@@ -17,7 +16,7 @@ class ButtonSegmenter:
         self.min_button_radius = min_button_radius
         self.max_button_radius = max_button_radius
 
-    def __call__(self, assay: Assay) -> Assay:
+    def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         num_rows, num_cols = assay.centers.shape[:2]
         channel_idx = np.where(assay.channels == assay.search_channel)[0][0]
 

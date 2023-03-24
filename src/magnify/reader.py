@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Iterator
 import collections
 import datetime
 import fnmatch
@@ -6,20 +7,20 @@ import glob
 import os
 import re
 
+from numpy.typing import ArrayLike
+from typing import Iterator
 import dask
 import dask.array as da
-from numpy.typing import ArrayLike
 import numpy as np
 import pandas as pd
 import tifffile
 import xarray as xr
 
-from magnify.assay import Assay
 from magnify.pipeline import Pipeline
 import magnify.registry as registry
 
 
-class ChipReader:
+class Reader:
     def __init__(self) -> None:
         pass
 
@@ -27,57 +28,10 @@ class ChipReader:
         self,
         data: ArrayLike | str,
         names: ArrayLike | str,
-        search_on: str = "egfp",
+        search_on: str = "all",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
-    ) -> Assay:
-        if isinstance(data, str):
-            path_dict = extract_paths(data)
-            if len(path_dict) == 0:
-                raise FileNotFoundError(f"The pattern {data} did not lead to any files.")
-            times, channels, rows, cols = (sorted(set(idx)) for idx in zip(*path_dict.keys()))
-
-        names_array = read_names(names)
-
-        for time in times:
-            path_list = [path_dict[key] for key in sorted(path_dict) if key[0] == time]
-            tiles = np.stack(tifffile.imread(path_list), axis=0)
-            tiles = np.reshape(
-                tiles,
-                (
-                    1,
-                    len(channels),
-                    len(rows),
-                    len(cols),
-                    *tiles.shape[1:],
-                ),
-            )
-            yield Assay(
-                num_marker_dims=2,
-                times=np.array([time]),
-                channels=np.array(channels),
-                search_channel=search_on,
-                images=tiles,
-                names=names_array,
-            )
-
-    @registry.readers.register("chip_reader")
-    def make():
-        return ChipReader()
-
-
-class BeadReader:
-    def __init__(self) -> None:
-        pass
-
-    def __call__(
-        self,
-        data: ArrayLike | str,
-        names: ArrayLike | str,
-        search_on: str = "open",
-        times: Sequence[int] | None = None,
-        channels: Sequence[str] | None = None,
-    ) -> Assay:
+    ) -> Iterator[xr.Dataset]:
         if isinstance(data, str):
             data = [data]
 
@@ -86,7 +40,7 @@ class BeadReader:
             if len(path_dict) == 0:
                 raise FileNotFoundError(f"The pattern {d} did not lead to any files.")
 
-            for assay_dict in path_dict.values():
+            for assay_name, assay_dict in path_dict.items():
                 # Use these variables within the loop so we don't affect other assays.
                 channel_coords = channels
                 time_coords = times
@@ -100,17 +54,17 @@ class BeadReader:
                 dims_in_path = []
                 outer_shape = tuple()
                 if channel_idxs[0] != -1:
-                    dims_in_path += "channel"
-                    outer_shape += len(channel_idxs)
+                    dims_in_path.append("channel")
+                    outer_shape += (len(channel_idxs),)
                 if time_idxs[0] != -1:
-                    dims_in_path += "time"
-                    outer_shape += len(time_idxs)
+                    dims_in_path.append("time")
+                    outer_shape += (len(time_idxs),)
                 if row_idxs[0] != -1:
-                    dims_in_path += "tile_row"
-                    outer_shape += len(row_idxs)
+                    dims_in_path.append("tile_row")
+                    outer_shape += (len(row_idxs),)
                 if col_idxs[0] != -1:
-                    dims_in_path += "tile_col"
-                    outer_shape += len(col_idxs)
+                    dims_in_path.append("tile_col")
+                    outer_shape += (len(col_idxs),)
 
                 # If the user didn't specify times or channels use the ones from the path.
                 if time_coords is None and "time" in dims_in_path:
@@ -168,7 +122,10 @@ class BeadReader:
                 assay = xr.Dataset(
                     {"image": (dims_in_path + dims_in_file, images)},
                     coords=coords,
-                    attrs={"search_channel": search_on},
+                    attrs={
+                        "name": assay_name,
+                        "search_channel": search_on,
+                    },
                 )
 
                 # Make sure the assay always has a time and channel dimension.
@@ -186,7 +143,7 @@ class BeadReader:
 
                 yield assay
 
-    @registry.readers.register("bead_reader")
+    @registry.readers.register("reader")
     def make():
         return BeadReader()
 

@@ -7,9 +7,9 @@ import cv2 as cv
 import numpy as np
 import numpy.ma as ma
 import scipy
+import xarray as xr
 
 from magnify import utils
-from magnify.assay import Assay
 import magnify.registry as registry
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,8 @@ class ButtonFinder:
 
     def __call__(
         self,
-        assay: Assay,
-    ) -> Assay:
+        assay: xr.Dataset,
+    ) -> xr.Dataset:
         num_rows, num_cols = assay.names.shape
         idx = np.where(assay.channels == assay.search_channel)[0][0]
         image = utils.to_uint8(assay.images[0, idx])
@@ -143,13 +143,13 @@ class BeadFinder:
 
     def __call__(
         self,
-        assay: Assay,
+        assay: xr.Dataset,
         min_bead_radius: int = 10,
         max_bead_radius: int = 30,
         region_length: int = 61,
         param1: int = 50,
         param2: int = 30,
-    ) -> Assay:
+    ) -> xr.Dataset:
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.region_length = region_length

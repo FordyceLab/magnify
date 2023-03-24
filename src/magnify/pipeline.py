@@ -3,16 +3,16 @@ from typing import Callable
 
 from numpy.typing import ArrayLike
 import tqdm
+import xarray as xr
 
-from magnify.assay import Assay
 import magnify.registry as registry
 import magnify.utils as utils
 
 
 class Pipeline:
     def __init__(self, reader: str):
-        self.reader: Callable[[ArrayLike | str], Assay] = registry.readers.get(reader)()
-        self.components: list[Callable[[Assay], Assay]] = []
+        self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(reader)()
+        self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
 
     def __call__(
         self,
@@ -23,7 +23,7 @@ class Pipeline:
         channels: Sequence[str] | None = None,
         progress_bar: bool = False,
         **kwargs,
-    ) -> Assay:
+    ) -> xr.Dataset | list[xr.Dataset]:
         inputs = self.reader(
             data=data, names=names, search_on=search_on, times=times, channels=channels
         )

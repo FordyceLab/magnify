@@ -3,13 +3,13 @@ from typing import cast
 
 import basicpy
 import numpy as np
+import xarray as xr
 
-from magnify.assay import Assay
 import magnify.registry as registry
 
 
 class Preprocessor:
-    def __call__(self, assay: Assay) -> Assay:
+    def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         tiles = assay.images
         flat_tiles = assay.images.reshape(-1, tiles.shape[-2], tiles.shape[-1])
         model = basicpy.basicpy.BaSiC(get_darkfield=True, smoothness_flatfield=1)
@@ -24,7 +24,7 @@ class Preprocessor:
 
 @registry.components.register("horizontal_flip")
 def make_horizontal_flip():
-    def horizontal_flip(assay: Assay):
+    def horizontal_flip(assay: xr.Dataset):
         assay.images = np.flip(assay.images, axis=-1)
         return assay
 
