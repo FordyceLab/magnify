@@ -77,7 +77,6 @@ class Assay:
         """Drop the regions from the assay."""
         self.regions = np.empty(self.names.shape + (len(self.times), len(self.channels), 0, 0))
 
-    @staticmethod
     def from_assays(assays: Sequence[Assay]) -> Assay:
         """Concatenate the given assays into a single assay along the time dimension."""
         return Assay(

@@ -15,6 +15,8 @@ def load(name: str):
         return chip_pipeline()
     elif name == "mrbles":
         return mrbles_pipeline()
+    elif name == "beads":
+        return mrbles_pipeline()
     else:
         raise ValueError(f"Pipeline {name} does not exist.")
 

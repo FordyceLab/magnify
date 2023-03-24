@@ -25,6 +25,5 @@ class Stitcher:
         return assay
 
     @components.register("stitcher")
-    @staticmethod
     def make():
         return Stitcher()

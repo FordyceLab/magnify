@@ -30,7 +30,10 @@ class ButtonFinder:
         self.max_button_radius = max_button_radius
         self.cluster_penalty = cluster_penalty
 
-    def __call__(self, assay: Assay) -> Assay:
+    def __call__(
+        self,
+        assay: Assay,
+    ) -> Assay:
         num_rows, num_cols = assay.names.shape
         idx = np.where(assay.channels == assay.search_channel)[0][0]
         image = utils.to_uint8(assay.images[0, idx])
@@ -119,7 +122,6 @@ class ButtonFinder:
         return assay
 
     @registry.components.register("button_finder")
-    @staticmethod
     def make():
         return ButtonFinder()
 
@@ -130,17 +132,34 @@ class BeadFinder:
         min_bead_radius: int = 10,
         max_bead_radius: int = 30,
         region_length: int = 61,
+        param1: int = 50,
+        param2: int = 30,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.region_length = region_length
+        self.param1 = param1
+        self.param2 = param2
 
-    def __call__(self, assay: Assay) -> Assay:
+    def __call__(
+        self,
+        assay: Assay,
+        min_bead_radius: int = 10,
+        max_bead_radius: int = 30,
+        region_length: int = 61,
+        param1: int = 50,
+        param2: int = 30,
+    ) -> Assay:
+        self.min_bead_radius = min_bead_radius
+        self.max_bead_radius = max_bead_radius
+        self.region_length = region_length
+        self.param1 = param1
+        self.param2 = param2
         if isinstance(assay.search_channel, str):
-            if assay.search_channel in assay.channels:
+            if assay.search_channel in assay.channel:
                 search_channels = [assay.search_channel]
             elif assay.search_channel == "all":
-                search_channels = assay.channels
+                search_channels = assay.channel
             else:
                 raise ValueError(f"{assay.search_channel} is not a channel name.")
         else:
@@ -148,84 +167,127 @@ class BeadFinder:
             search_channels = assay.search_channel
 
         centers = np.empty((0, 2))
-        radii = np.empty((0,))
-        for search_channel in search_channels:
-            idx = np.where(assay.channels == search_channel)[0][0]
-            image = utils.to_uint8(assay.images[0, idx])
-            blur = cv.medianBlur(image, 5)
+        radii = np.empty((0))
+        for t in assay.time:
+            for search_channel in search_channels:
+                image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
+                blur = cv.medianBlur(image, 5)
 
-            # Find any circles in the image.
-            circles = cv.HoughCircles(
-                blur,
-                method=cv.HOUGH_GRADIENT,
-                dp=1,
-                minDist=2 * self.min_bead_radius,
-                param1=60,
-                param2=40,
-                minRadius=self.min_bead_radius,
-                maxRadius=self.max_bead_radius,
-            )
-
-            if circles is not None:
-                circles = circles[0]
-                # Save circle center locations in row-col order.
-                c = circles[:, 1::-1]
-                if len(centers) > 0:
-                    # Remove centers too close to those we already found in another channel.
-                    dist_matrix = np.linalg.norm(c[np.newaxis] - centers[:, np.newaxis], axis=2)
-                    valid = np.min(dist_matrix, axis=0) > self.min_bead_radius
-                else:
-                    valid = np.ones(len(circles), dtype=bool)
-
-                centers = np.concatenate([centers, c[valid]])
-                radii = np.concatenate([radii, circles[valid, 2]])
-
-        # Update the assay object with the beads we found.
-        if len(centers) > 0:
-            num_beads = len(centers)
-            assay.centers = centers[:, np.newaxis]
-            # Create the array of subimage regions.
-            assay.regions = np.empty(
-                (num_beads, 1, len(assay.channels), self.region_length, self.region_length),
-                dtype=assay.images.dtype,
-            )
-            assay.offsets = np.empty((num_beads, 2), dtype=int)
-            # Compute the foreground and background masks for all buttons.
-            assay.fg = ma.array(assay.regions, copy=False)
-            assay.bg = ma.array(assay.regions, copy=False)
-            for i in range(num_beads):
-                # Set the subimage region for this bead.
-                top, bottom, left, right = utils.bounding_box(
-                    round(assay.centers[i, 0, 0]),
-                    round(assay.centers[i, 0, 1]),
-                    self.region_length,
-                    image.shape[-2],
-                    image.shape[-1],
-                )
-                assay.regions[i] = assay.images[..., top:bottom, left:right]
-                assay.offsets[i] = top, left
-
-                # Set the foreground of the bead to be the circle we found.
-                fg_mask = utils.circle(
-                    self.region_length,
-                    row=round(assay.centers[i, 0, 0] - top),
-                    col=round(assay.centers[i, 0, 1] - left),
-                    radius=round(radii[i]),
-                    value=True,
+                # Find any circles in the image.
+                circles = cv.HoughCircles(
+                    blur,
+                    method=cv.HOUGH_GRADIENT,
+                    dp=1,
+                    minDist=2 * self.min_bead_radius,
+                    param1=self.param1,
+                    param2=self.param2,
+                    minRadius=self.min_bead_radius,
+                    maxRadius=self.max_bead_radius,
                 )
 
-                # Set the background to be everything else in the region,
-                # which could include other beads.
-                bg_mask = ~fg_mask
+                if circles is not None:
+                    circles = circles[0]
+                    # Save circle center locations.
+                    c = circles[:, :2]
+                    if len(centers) > 0:
+                        # Remove centers too close to those we already found in another channel or time.
+                        dist_matrix = np.linalg.norm(c[np.newaxis] - centers[:, np.newaxis], axis=2)
+                        valid = np.min(dist_matrix, axis=0) > self.min_bead_radius
+                    else:
+                        valid = np.ones(len(circles), dtype=bool)
 
-                # Set the masked arrays with our computed masks.
-                assay.fg[i, 0, :, ~fg_mask] = ma.masked
-                assay.bg[i, 0, :, ~bg_mask] = ma.masked
+                    centers = np.concatenate([centers, c[valid]])
+                    radii = np.concatenate([radii, circles[valid, 2]])
+
+            # Update the assay object with the beads we found.
+            if len(centers) > 0:
+                num_beads = len(centers)
+                # Create the array of subimage regions.
+                assay = assay.assign(
+                    region=(
+                        ("marker", "channel", "time", "row", "col"),
+                        np.empty(
+                            (
+                                num_beads,
+                                assay.dims["channel"],
+                                assay.dims["time"],
+                                self.region_length,
+                                self.region_length,
+                            ),
+                            dtype=assay.image.dtype,
+                        ),
+                    ),
+                    fg=(
+                        ("marker", "channel", "time", "row", "col"),
+                        np.empty(
+                            (
+                                num_beads,
+                                assay.dims["channel"],
+                                assay.dims["time"],
+                                self.region_length,
+                                self.region_length,
+                            ),
+                            dtype=bool,
+                        ),
+                    ),
+                    bg=(
+                        ("marker", "channel", "time", "row", "col"),
+                        np.empty(
+                            (
+                                num_beads,
+                                assay.dims["channel"],
+                                assay.dims["time"],
+                                self.region_length,
+                                self.region_length,
+                            ),
+                            dtype=bool,
+                        ),
+                    ),
+                )
+                assay = assay.assign_coords(
+                    x=(
+                        ["marker", "time"],
+                        np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
+                    ),
+                    y=(
+                        ["marker", "time"],
+                        np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
+                    ),
+                )
+                # Compute the foreground and background masks for all buttons.
+                for i in range(num_beads):
+                    # Set the subimage region for this bead.
+                    top, bottom, left, right = utils.bounding_box(
+                        round(float(assay.y[i, 0])),
+                        round(float(assay.x[i, 0])),
+                        self.region_length,
+                        image.shape[-2],
+                        image.shape[-1],
+                    )
+                    assay.region[i] = assay.image.sel(
+                        im_row=slice(top, bottom), im_col=slice(left, right)
+                    )
+
+                    # Set the foreground of the bead to be the circle we found.
+                    fg_mask = utils.circle(
+                        self.region_length,
+                        row=round(float(assay.y[i, 0] - top)),
+                        col=round(float(assay.x[i, 0] - left)),
+                        radius=round(radii[i]),
+                        value=True,
+                    )
+
+                    # Set the background to be everything else in the region,
+                    # which could include other beads.
+                    bg_mask = ~fg_mask
+
+                    # Set the masked arrays with our computed masks.
+                    assay.fg[i] = fg_mask
+                    assay.bg[i] = bg_mask
 
         return assay
 
     @registry.components.register("bead_finder")
-    @staticmethod
     def make():
         return BeadFinder()
 

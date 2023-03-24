@@ -119,6 +119,5 @@ class ButtonSegmenter:
         return assay
 
     @components.register("button_segmenter")
-    @staticmethod
     def make():
         return ButtonSegmenter()

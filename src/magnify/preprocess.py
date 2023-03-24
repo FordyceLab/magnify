@@ -18,7 +18,6 @@ class Preprocessor:
         return assay
 
     @registry.components.register("preprocessor")
-    @staticmethod
     def make():
         return Preprocessor()
 
