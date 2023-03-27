@@ -17,12 +17,12 @@ class Preprocessor:
         assay = assay.assign(image=result.reshape(*tiles.shape))
         return assay
 
-    @registry.components.register("preprocessor")
+    @registry.components.register("preprocess")
     def make():
         return Preprocessor()
 
 
-@registry.components.register("horizontal_flip")
+@registry.components.register("flip_horizontal")
 def make_horizontal_flip():
     def horizontal_flip(assay: xr.Dataset):
         assay["image"] = assay.image.isel(im_col=slice(None, None, -1))

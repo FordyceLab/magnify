@@ -203,7 +203,7 @@ def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
         if "(assay)" in pattern:
             assay = match.group("assay")
         else:
-            assay = -1
+            assay = ""
 
         if "(channel)" in pattern:
             channel = match.group("channel")

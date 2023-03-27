@@ -28,6 +28,6 @@ class Stitcher:
         assay["image"] = images
         return assay
 
-    @components.register("stitcher")
+    @components.register("stitch")
     def make():
         return Stitcher()

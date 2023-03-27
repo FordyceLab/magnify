@@ -25,18 +25,18 @@ def chip_pipeline():
     pipe = Pipeline("read")
     pipe.add_pipe("read_pinlist")
     # pipe.add_pipe("preprocessor")
-    pipe.add_pipe("horizontal_flip")
-    pipe.add_pipe("stitcher")
-    pipe.add_pipe("button_finder")
+    pipe.add_pipe("flip_horizontal")
+    pipe.add_pipe("stitch")
+    pipe.add_pipe("find_buttons")
     # pipe.add_pipe("background_filter")
 
     return pipe
 
 
 def mrbles_pipeline():
-    pipe = Pipeline("reader")
-    pipe.add_pipe("stitcher")
-    pipe.add_pipe("bead_finder")
+    pipe = Pipeline("read")
+    pipe.add_pipe("stitch")
+    pipe.add_pipe("find_beads")
     # pipe.add_pipe("background_filter")
 
     return pipe

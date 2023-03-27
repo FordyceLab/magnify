@@ -321,7 +321,7 @@ class ButtonFinder:
 
         return assay
 
-    @registry.components.register("button_finder")
+    @registry.components.register("find_buttons")
     def make():
         return ButtonFinder()
 
@@ -495,7 +495,7 @@ class BeadFinder:
 
         return assay
 
-    @registry.components.register("bead_finder")
+    @registry.components.register("find_beads")
     def make():
         return BeadFinder()
 
