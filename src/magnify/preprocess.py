@@ -10,11 +10,11 @@ import magnify.registry as registry
 
 class Preprocessor:
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        tiles = assay.images
-        flat_tiles = assay.images.reshape(-1, tiles.shape[-2], tiles.shape[-1])
+        tiles = assay.image
+        flat_tiles = assay.image.reshape(-1, tiles.dim["im_row"], tiles.dim["im_col"])
         model = basicpy.basicpy.BaSiC(get_darkfield=True, smoothness_flatfield=1)
         result = cast(np.ndarray, model.fit_transform(flat_tiles, timelapse=False))
-        assay.images = result.reshape(*tiles.shape)
+        assay = assay.assign(image=result.reshape(*tiles.shape))
         return assay
 
     @registry.components.register("preprocessor")
@@ -25,7 +25,7 @@ class Preprocessor:
 @registry.components.register("horizontal_flip")
 def make_horizontal_flip():
     def horizontal_flip(assay: xr.Dataset):
-        assay.images = np.flip(assay.images, axis=-1)
+        assay["image"] = assay.image.isel(im_col=slice(None, None, -1))
         return assay
 
     return horizontal_flip

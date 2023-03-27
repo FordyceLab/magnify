@@ -9,7 +9,6 @@ import re
 
 from numpy.typing import ArrayLike
 from typing import Iterator
-import dask
 import dask.array as da
 import numpy as np
 import pandas as pd
@@ -102,14 +101,21 @@ class Reader:
                         "Dimensions specified in the path names and inside the tiff file overlap."
                     )
 
-                imread = dask.delayed(lambda x: tifffile.TiffFile(x).asarray(), pure=True)
-                images = []
-                for _, path in sorted(assay_dict.items()):
-                    images.append(da.from_delayed(imread(path), dtype=dtype, shape=inner_shape))
+                # Setup a dask array to lazyload images.
+                filenames = [path for _, path in sorted(assay_dict.items())]
 
-                images = da.stack(images, axis=0)
-                # Reshape the images to account for the dimensions specified in the path.
-                images = images.reshape(outer_shape + inner_shape)
+                def read_image(block_id):
+                    block_id = block_id[: len(outer_shape)]
+                    idx = np.ravel_multi_index(block_id, outer_shape)
+                    with tifffile.TiffFile(filenames[idx]) as tif:
+                        return np.expand_dims(tif.asarray(), axis=tuple(range(len(block_id))))
+
+                # Chunk the images so that each chunk represents a single file.
+                images = da.map_blocks(
+                    read_image,
+                    dtype=dtype,
+                    chunks=((tuple((1,) * size for size in outer_shape) + inner_shape)),
+                )
 
                 # Set named coordinates for channels and times if they're available.
                 coords = {}
@@ -143,9 +149,18 @@ class Reader:
 
                 yield assay
 
-    @registry.readers.register("reader")
+    @registry.readers.register("read")
     def make():
-        return BeadReader()
+        return Reader()
+
+
+@registry.components.register("read_pinlist")
+def make_read_pinlist():
+    def read_pinlist(assay, pinlist):
+        assay = assay.assign_coords(id=(("marker_row", "marker_col"), read_names(pinlist)))
+        return assay
+
+    return read_pinlist
 
 
 def read_names(path):

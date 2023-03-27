@@ -4,8 +4,8 @@ import logging
 
 from numpy.typing import ArrayLike
 import cv2 as cv
+import dask.array as da
 import numpy as np
-import numpy.ma as ma
 import scipy
 import xarray as xr
 
@@ -23,101 +23,301 @@ class ButtonFinder:
         min_button_radius: int = 4,
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
+        region_length: int = 61,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
         self.min_button_radius = min_button_radius
         self.max_button_radius = max_button_radius
         self.cluster_penalty = cluster_penalty
+        self.region_length = region_length
 
     def __call__(
         self,
         assay: xr.Dataset,
+        row_dist: float = 126.3,
+        col_dist: float = 233.2,
+        min_button_radius: int = 4,
+        max_button_radius: int = 15,
+        cluster_penalty: float = 10,
+        region_length: int = 61,
     ) -> xr.Dataset:
-        num_rows, num_cols = assay.names.shape
-        idx = np.where(assay.channels == assay.search_channel)[0][0]
-        image = utils.to_uint8(assay.images[0, idx])
+        self.row_dist = row_dist
+        self.col_dist = col_dist
+        self.min_button_radius = min_button_radius
+        self.max_button_radius = max_button_radius
+        self.cluster_penalty = cluster_penalty
+        self.region_length = region_length
+
+        num_rows, num_cols = assay.id.shape
+        if isinstance(assay.search_channel, str):
+            if assay.search_channel in assay.channel:
+                search_channels = [assay.search_channel]
+            elif assay.search_channel == "all":
+                search_channels = assay.channel
+            else:
+                raise ValueError(f"{assay.search_channel} is not a channel name.")
+        else:
+            # We're searching across multiple channels.
+            search_channels = assay.search_channel
         min_button_dist = round(min(self.row_dist, self.col_dist) / 2)
         if min_button_dist % 2 == 0:
             # Certain opencv functions require an odd blocksize.
             min_button_dist -= 1
 
-        # Step 1: Find an imperfect button mask by thresholding.
-        mask = cv.adaptiveThreshold(
-            image,
-            maxValue=255,
-            adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-            thresholdType=cv.THRESH_BINARY,
-            blockSize=min_button_dist,
-            C=-1,
+        # Create the array of subimage regions.
+        regions = da.empty(
+            (
+                num_rows,
+                num_cols,
+                assay.dims["channel"],
+                assay.dims["time"],
+                self.region_length,
+                self.region_length,
+            ),
+            dtype=assay.image.dtype,
+            chunks=(
+                1,
+                1,
+                assay.dims["channel"],
+                assay.dims["time"],
+                self.region_length,
+                self.region_length,
+            ),
+        )
+        assay = assay.assign(
+            region=(
+                ("marker_row", "marker_col", "channel", "time", "row", "col"),
+                regions,
+            ),
+            fg=(
+                ("marker_row", "marker_col", "channel", "time", "row", "col"),
+                da.empty_like(
+                    regions,
+                    dtype=bool,
+                ),
+            ),
+            bg=(
+                ("marker_row", "marker_col", "channel", "time", "row", "col"),
+                da.empty_like(
+                    regions,
+                    dtype=bool,
+                ),
+            ),
+        )
+        # Create the x and y coordinates arrays for each button.
+        assay = assay.assign_coords(
+            x=(
+                ["marker_row", "marker_col", "time"],
+                np.empty((num_rows, num_cols, assay.dims["time"])),
+            ),
+            y=(
+                ["marker_row", "marker_col", "time"],
+                np.empty((num_rows, num_cols, assay.dims["time"])),
+            ),
         )
 
-        # Step 2: Get all connected components and filter out some of them.
-        _, _, stats, points = cv.connectedComponentsWithStats(mask, connectivity=4)
+        # Run the button finding algorithm for each timestep.
+        for t, time in enumerate(assay.time):
+            # Preload all images for this timnepoint so we only read from disk once.
+            images = assay.image.sel(time=time).to_numpy()
+            points = np.empty((0, 2))
+            for channel in search_channels:
+                c = np.where(assay.channel == channel)[0][0]
+                image = utils.to_uint8(images[c])
+                # Step 1: Find an imperfect button mask by thresholding.
+                mask = cv.adaptiveThreshold(
+                    image,
+                    maxValue=255,
+                    adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    thresholdType=cv.THRESH_BINARY,
+                    blockSize=min_button_dist,
+                    C=-1,
+                )
+                # Step 2: Find connected components and filter out points.
+                _, _, stats, new_points = cv.connectedComponentsWithStats(mask, connectivity=4)
 
-        # Ignore the background point and change indexing to be in row-col order.
-        points = points[1:, ::-1]
-        stats = stats[1:]
-        # Exclude large and small blobs.
-        points = points[
-            (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
-            & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
-            & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
-            & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
-        ]
-        # Remove points too close to other points.
-        dist_matrix = np.linalg.norm(points[np.newaxis] - points[:, np.newaxis], axis=2)
-        dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
-        points = points[np.min(dist_matrix, axis=0) > min_button_dist]
+                # Ignore the background point.
+                new_points = new_points[1:]
+                stats = stats[1:]
 
-        # Step 3: Cluster the points into distinct rows and columns.
-        # The number of buttons we expect to see per row/col can vary if we have blank buttons.
-        points_per_row = (assay.names != "").sum(axis=1)
-        row_labels = cluster_1d(
-            points[:, 0],
-            total_length=image.shape[0],
-            num_clusters=num_rows,
-            cluster_length=self.row_dist,
-            ideal_num_points=points_per_row,
-            penalty=self.cluster_penalty,
-        )
-        points_per_col = (assay.names != "").sum(axis=0)
-        col_labels = cluster_1d(
-            points[:, 1],
-            total_length=image.shape[1],
-            num_clusters=num_cols,
-            cluster_length=self.col_dist,
-            ideal_num_points=points_per_col,
-            penalty=self.cluster_penalty,
-        )
+                # Exclude large and small blobs.
+                new_points = new_points[
+                    (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
+                    & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
+                    & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
+                    & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
+                ]
+                # Remove points too close to other points in this channel.
+                dist_matrix = np.linalg.norm(
+                    new_points[np.newaxis] - new_points[:, np.newaxis], axis=2
+                )
+                dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
+                new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
 
-        # Exclude boundary points that didn't fall into clusters.
-        in_cluster = (row_labels >= 0) & (col_labels >= 0)
-        points = points[in_cluster]
-        col_labels = col_labels[in_cluster]
-        row_labels = row_labels[in_cluster]
+                if len(points) > 0:
+                    # Remove points too close to other points in previous channels.
+                    dist_matrix = np.linalg.norm(
+                        points[np.newaxis] - new_points[:, np.newaxis], axis=2
+                    )
+                    new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
 
-        # Step 4: Draw lines through each cluster.
-        row_slope, row_intercepts = regress_clusters(
-            points, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
-        )
-        # We treat column indices as y and row indices as x to avoid near-infinite slopes.
-        col_slope, col_intercepts = regress_clusters(
-            points[:, ::-1],
-            labels=col_labels,
-            num_clusters=num_cols,
-            ideal_num_points=points_per_col,
-        )
+                # Add the new points to the list of seen points.
+                points = np.concatenate([points, new_points])
 
-        # Step 5: Set button locations as the intersection of each line pair.
-        button_pos = np.empty((num_rows, num_cols, 2))
-        button_pos[:, :, 0] = (
-            row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]
-        ) / (1 - row_slope * col_slope)
-        button_pos[:, :, 1] = button_pos[:, :, 0] * col_slope + col_intercepts[np.newaxis]
+            # Split the points into x and y components.
+            x = points[:, 0]
+            y = points[:, 1]
 
-        # Step 6: Set the assay's button positions, making sure to add a time index.
-        assay.centers = button_pos[:, :, np.newaxis, :]
+            # Step 3: Cluster the points into distinct rows and columns.
+            # The number of buttons we expect to see per row/col can vary if we have blank buttons.
+            points_per_row = (assay.id != "").sum(dim="marker_col")
+            row_labels = cluster_1d(
+                y,
+                total_length=image.shape[0],
+                num_clusters=num_rows,
+                cluster_length=self.row_dist,
+                ideal_num_points=points_per_row,
+                penalty=self.cluster_penalty,
+            )
+            points_per_col = (assay.id != "").sum(dim="marker_row")
+            col_labels = cluster_1d(
+                x,
+                total_length=image.shape[1],
+                num_clusters=num_cols,
+                cluster_length=self.col_dist,
+                ideal_num_points=points_per_col,
+                penalty=self.cluster_penalty,
+            )
+
+            # Exclude boundary points that didn't fall into clusters.
+            in_cluster = (row_labels >= 0) & (col_labels >= 0)
+            x, y = x[in_cluster], y[in_cluster]
+            col_labels, row_labels = col_labels[in_cluster], row_labels[in_cluster]
+
+            # Step 4: Draw lines through each cluster.
+            row_slope, row_intercepts = regress_clusters(
+                x, y, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
+            )
+            # We treat column indices as y and row indices as x to avoid near-infinite slopes.
+            col_slope, col_intercepts = regress_clusters(
+                y,
+                x,
+                labels=col_labels,
+                num_clusters=num_cols,
+                ideal_num_points=points_per_col,
+            )
+
+            # Step 5: Set button locations as the intersection of each line pair.
+            assay.y[..., t] = (
+                row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]
+            ) / (1 - row_slope * col_slope)
+            assay.x[..., t] = assay.y[..., t] * col_slope + col_intercepts[np.newaxis]
+
+            # Step 6: Extract a region around each button.
+            offsets = np.empty((num_rows, num_cols, 2), dtype=int)
+            regions = np.empty(
+                (num_rows, num_cols, assay.dims["channel"], self.region_length, self.region_length),
+                dtype=assay.region.dtype,
+            )
+            for i in range(num_rows):
+                for j in range(num_cols):
+                    top, bottom, left, right = utils.bounding_box(
+                        round(float(assay.x[i, j, t])),
+                        round(float(assay.y[i, j, t])),
+                        self.region_length,
+                        assay.dims["im_row"],
+                        assay.dims["im_col"],
+                    )
+                    regions[i, j] = images[:, top:bottom, left:right]
+                    offsets[i, j] = [left, top]
+            assay.region[:, :, :, t] = regions
+
+            # Step 7: Compute the foreground and background masks for all buttons.
+            fg = np.empty(
+                (num_rows, num_cols, assay.dims["channel"], self.region_length, self.region_length),
+                dtype=bool,
+            )
+            bg = np.empty_like(fg)
+            for i in range(num_rows):
+                for j in range(num_cols):
+                    # TODO: This step should occur over multiple channels.
+                    c = np.where(assay.channel == search_channels[0])[0][0]
+                    subimage = utils.to_uint8(regions[i, j, c])
+                    # Filter the subimage to smooth edges and remove noise.
+                    filtered = cv.bilateralFilter(
+                        subimage,
+                        d=9,
+                        sigmaColor=75,
+                        sigmaSpace=75,
+                        borderType=cv.BORDER_DEFAULT,
+                    )
+
+                    # Find any circles in the subimage.
+                    circles = cv.HoughCircles(
+                        filtered,
+                        method=cv.HOUGH_GRADIENT,
+                        dp=1,
+                        minDist=50,
+                        param1=20,
+                        param2=5,
+                        minRadius=self.min_button_radius,
+                        maxRadius=self.max_button_radius,
+                    )
+
+                    # Update our estimate of the button position if we found some circles.
+                    if circles is not None:
+                        circles = circles[0, :, :2]
+                        point = np.array([assay.x[i, j, t], assay.y[i, j, t]]) - offsets[i, j]
+                        # Use the circle center closest to our previous estimate of the button.
+                        closest_idx = np.argmin(np.linalg.norm(circles - point, axis=1))
+                        assay.x[i, j, t], assay.y[i, j, t] = circles[closest_idx] + offsets[i, j]
+
+                    x_rel = round(float(assay.x[i, j, t])) - offsets[i, j, 0]
+                    y_rel = round(float(assay.y[i, j, t])) - offsets[i, j, 1]
+
+                    # Set the foreground (the button) to be a circle of fixed radius.
+                    fg_mask = utils.circle(
+                        self.region_length,
+                        row=y_rel,
+                        col=x_rel,
+                        radius=self.max_button_radius,
+                        value=True,
+                    )
+
+                    # Set the background to be the annulus around our foreground.
+                    bg_mask = utils.circle(
+                        self.region_length,
+                        row=y_rel,
+                        col=x_rel,
+                        radius=2 * self.max_button_radius,
+                        value=True,
+                    )
+                    bg_mask &= ~fg_mask
+
+                    # Refine the foreground & background by finding areas that are bright and dim.
+                    _, bright_mask = cv.threshold(
+                        subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
+                    )
+                    dim_mask = ~cv.dilate(
+                        bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
+                    )
+                    bright_mask = bright_mask.astype(bool)
+                    dim_mask = dim_mask.astype(bool)
+
+                    # If part of the button is bright then set the foreground to that bright area.
+                    if np.any(fg_mask & bright_mask):
+                        fg_mask &= bright_mask
+
+                    # The background on the other hand should not be bright.
+                    if np.any(bg_mask & dim_mask):
+                        bg_mask &= dim_mask
+
+                    fg[i, j] = fg_mask
+                    bg[i, j] = bg_mask
+
+            assay.fg[:, :, :, t] = fg
+            assay.bg[:, :, :, t] = bg
 
         return assay
 
@@ -171,11 +371,18 @@ class BeadFinder:
         for t in assay.time:
             for search_channel in search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
-                blur = cv.medianBlur(image, 5)
+                # Filter the subimage to smooth edges and remove noise.
+                filtered = cv.bilateralFilter(
+                    image,
+                    d=9,
+                    sigmaColor=75,
+                    sigmaSpace=75,
+                    borderType=cv.BORDER_DEFAULT,
+                )
 
                 # Find any circles in the image.
                 circles = cv.HoughCircles(
-                    blur,
+                    filtered,
                     method=cv.HOUGH_GRADIENT,
                     dp=1,
                     minDist=2 * self.min_bead_radius,
@@ -199,91 +406,92 @@ class BeadFinder:
                     centers = np.concatenate([centers, c[valid]])
                     radii = np.concatenate([radii, circles[valid, 2]])
 
-            # Update the assay object with the beads we found.
-            if len(centers) > 0:
-                num_beads = len(centers)
-                # Create the array of subimage regions.
-                assay = assay.assign(
-                    region=(
-                        ("marker", "channel", "time", "row", "col"),
-                        np.empty(
-                            (
-                                num_beads,
-                                assay.dims["channel"],
-                                assay.dims["time"],
-                                self.region_length,
-                                self.region_length,
-                            ),
-                            dtype=assay.image.dtype,
+        # Update the assay object with the beads we found.
+        if len(centers) > 0:
+            num_beads = len(centers)
+            # Create the array of subimage regions.
+            assay = assay.assign(
+                region=(
+                    ("marker", "channel", "time", "row", "col"),
+                    np.empty(
+                        (
+                            num_beads,
+                            assay.dims["channel"],
+                            assay.dims["time"],
+                            self.region_length,
+                            self.region_length,
                         ),
+                        dtype=assay.image.dtype,
                     ),
-                    fg=(
-                        ("marker", "channel", "time", "row", "col"),
-                        np.empty(
-                            (
-                                num_beads,
-                                assay.dims["channel"],
-                                assay.dims["time"],
-                                self.region_length,
-                                self.region_length,
-                            ),
-                            dtype=bool,
+                ),
+                fg=(
+                    ("marker", "channel", "time", "row", "col"),
+                    np.empty(
+                        (
+                            num_beads,
+                            assay.dims["channel"],
+                            assay.dims["time"],
+                            self.region_length,
+                            self.region_length,
                         ),
+                        dtype=bool,
                     ),
-                    bg=(
-                        ("marker", "channel", "time", "row", "col"),
-                        np.empty(
-                            (
-                                num_beads,
-                                assay.dims["channel"],
-                                assay.dims["time"],
-                                self.region_length,
-                                self.region_length,
-                            ),
-                            dtype=bool,
+                ),
+                bg=(
+                    ("marker", "channel", "time", "row", "col"),
+                    np.empty(
+                        (
+                            num_beads,
+                            assay.dims["channel"],
+                            assay.dims["time"],
+                            self.region_length,
+                            self.region_length,
                         ),
+                        dtype=bool,
                     ),
+                ),
+            )
+            assay = assay.assign_coords(
+                x=(
+                    ["marker", "time"],
+                    np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
+                ),
+                y=(
+                    ["marker", "time"],
+                    np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
+                ),
+            )
+
+            # Compute the foreground and background masks for all buttons.
+            for i in range(num_beads):
+                # Set the subimage region for this bead.
+                top, bottom, left, right = utils.bounding_box(
+                    round(float(assay.x[i, 0])),
+                    round(float(assay.y[i, 0])),
+                    self.region_length,
+                    image.shape[-2],
+                    image.shape[-1],
                 )
-                assay = assay.assign_coords(
-                    x=(
-                        ["marker", "time"],
-                        np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
-                    ),
-                    y=(
-                        ["marker", "time"],
-                        np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
-                    ),
+                assay.region[i] = assay.image.sel(
+                    im_row=slice(top, bottom), im_col=slice(left, right)
                 )
-                # Compute the foreground and background masks for all buttons.
-                for i in range(num_beads):
-                    # Set the subimage region for this bead.
-                    top, bottom, left, right = utils.bounding_box(
-                        round(float(assay.y[i, 0])),
-                        round(float(assay.x[i, 0])),
-                        self.region_length,
-                        image.shape[-2],
-                        image.shape[-1],
-                    )
-                    assay.region[i] = assay.image.sel(
-                        im_row=slice(top, bottom), im_col=slice(left, right)
-                    )
 
-                    # Set the foreground of the bead to be the circle we found.
-                    fg_mask = utils.circle(
-                        self.region_length,
-                        row=round(float(assay.y[i, 0] - top)),
-                        col=round(float(assay.x[i, 0] - left)),
-                        radius=round(radii[i]),
-                        value=True,
-                    )
+                # Set the foreground of the bead to be the circle we found.
+                fg_mask = utils.circle(
+                    self.region_length,
+                    row=round(float(assay.y[i, 0] - top)),
+                    col=round(float(assay.x[i, 0] - left)),
+                    radius=round(radii[i]),
+                    value=True,
+                )
 
-                    # Set the background to be everything else in the region,
-                    # which could include other beads.
-                    bg_mask = ~fg_mask
+                # Set the background to be everything else in the region,
+                # which could include other beads.
+                bg_mask = ~fg_mask
 
-                    # Set the masked arrays with our computed masks.
-                    assay.fg[i] = fg_mask
-                    assay.bg[i] = bg_mask
+                # Set the masked arrays with our computed masks.
+                assay.fg[i] = fg_mask
+                assay.bg[i] = bg_mask
 
         return assay
 
@@ -340,13 +548,17 @@ def cluster_1d(
 
 
 def regress_clusters(
-    points: np.ndarray, labels: np.ndarray, num_clusters: int, ideal_num_points: np.ndarray
+    x: np.ndarray,
+    y: np.ndarray,
+    labels: np.ndarray,
+    num_clusters: int,
+    ideal_num_points: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     # Find the best line per-cluster.
     slopes = np.full(num_clusters, np.nan)
     intercepts = np.full(num_clusters, np.nan)
-    cluster_points = [points[labels == i].T for i in range(num_clusters)]
-    for i, (y, x) in enumerate(cluster_points):
+    cluster_points = [(x[labels == i], y[labels == i]) for i in range(num_clusters)]
+    for i, (x, y) in enumerate(cluster_points):
         # Only regress on multi-point clusters.
         if len(x) > 1:
             slopes[i], intercepts[i], _, _, _ = scipy.stats.linregress(x, y)
@@ -358,7 +570,7 @@ def regress_clusters(
 
     # Recompute the intercepts using the median slope.
     slope = np.nanmedian(slopes)
-    for i, (y, x) in enumerate(cluster_points):
+    for i, (x, y) in enumerate(cluster_points):
         if len(x) > 0:
             intercepts[i] = np.median(y - slope * x)
 
@@ -370,7 +582,7 @@ def regress_clusters(
     )
     # Re-estimate intercepts using a weighted mean of global and local estimates.
     # This reduces outlier effects while still allowing uneven intercepts from image stitching.
-    for i, (y, x) in enumerate(cluster_points):
+    for i, (x, y) in enumerate(cluster_points):
         if ideal_num_points[i] != 0 and not_nan[i]:
             weight = min(len(x), ideal_num_points[i]) / ideal_num_points[i]
             intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)

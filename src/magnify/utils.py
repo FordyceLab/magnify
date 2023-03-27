@@ -25,18 +25,18 @@ def ceildiv(a: int, b: int) -> int:
 
 
 def bounding_box(
-    row: int, col: int, box_length: int, image_width: int, image_height: int
+    x: int, y: int, box_length: int, image_width: int, image_height: int
 ) -> tuple[int, int, int, int]:
-    top = row - box_length // 2
-    bottom = row + ceildiv(box_length, 2)
+    top = y - box_length // 2
+    bottom = y + ceildiv(box_length, 2)
     if top < 0:
         bottom += -top
         top = 0
     if bottom > image_height:
         top -= bottom - image_height
         bottom = image_height
-    left = col - box_length // 2
-    right = col + ceildiv(box_length, 2)
+    left = x - box_length // 2
+    right = x + ceildiv(box_length, 2)
     if left < 0:
         right += -left
         left = 0

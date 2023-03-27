@@ -24,11 +24,8 @@ class Stitcher:
         images = xr.concat(tiles, dim="im_col")
         # Move the time and channel axes back to the front.
         images = images.transpose("channel", "time", "im_row", "im_col")
-        assay = xr.Dataset(
-            {"image": images},
-            coords=assay.coords,
-            attrs={"search_channel": assay.search_channel},
-        )
+        assay = assay.drop_vars("image")
+        assay["image"] = images
         return assay
 
     @components.register("stitcher")

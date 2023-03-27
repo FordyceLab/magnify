@@ -22,12 +22,12 @@ def load(name: str) -> Pipeline:
 
 
 def chip_pipeline():
-    pipe = Pipeline("reader")
-    pipe.add_pipe("preprocessor")
+    pipe = Pipeline("read")
+    pipe.add_pipe("read_pinlist")
+    # pipe.add_pipe("preprocessor")
     pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitcher")
     pipe.add_pipe("button_finder")
-    pipe.add_pipe("button_segmenter")
     # pipe.add_pipe("background_filter")
 
     return pipe
