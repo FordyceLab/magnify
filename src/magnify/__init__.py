@@ -7,5 +7,4 @@ from magnify.registry import load
 import magnify.find
 import magnify.preprocess
 import magnify.reader
-import magnify.segment
 import magnify.stitch
