@@ -110,7 +110,11 @@ class Reader:
 
                 def read_image(block_id, filenames):
                     block_id = block_id[: len(outer_shape)]
-                    idx = np.ravel_multi_index(block_id, outer_shape)
+                    if len(block_id) > 0:
+                        idx = np.ravel_multi_index(block_id, outer_shape)
+                    else:
+                        # This is the case where we don't have indices outside the file.
+                        idx = 0
                     with tifffile.TiffFile(filenames[idx]) as tif:
                         return np.expand_dims(tif.asarray(), axis=tuple(range(len(block_id))))
 
