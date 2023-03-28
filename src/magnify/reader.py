@@ -216,7 +216,7 @@ def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
             if not format_str:
                 format_str = "%Y%m%d-%H%M%S"
             time_str = match.group("time")
-            time = datetime.datetime.strptime(time_str, format_str).timestamp()
+            time = datetime.datetime.strptime(time_str, format_str)
         else:
             time = -1
 

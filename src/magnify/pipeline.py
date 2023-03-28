@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import Callable
 
 from numpy.typing import ArrayLike
-import tqdm
 import xarray as xr
 
 import magnify.registry as registry
@@ -21,14 +20,13 @@ class Pipeline:
         search_on: str = "egfp",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
-        progress_bar: bool = False,
         **kwargs,
     ) -> xr.Dataset | list[xr.Dataset]:
         inputs = self.reader(
             data=data, names=names, search_on=search_on, times=times, channels=channels
         )
         assays = []
-        for assay in tqdm.tqdm(inputs, disable=not progress_bar):
+        for assay in inputs:
             for name, component in self.components:
                 assay = component(assay, **utils.valid_kwargs(kwargs, component))
 

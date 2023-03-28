@@ -7,6 +7,7 @@ import cv2 as cv
 import dask.array as da
 import numpy as np
 import scipy
+import tqdm
 import xarray as xr
 
 from magnify import utils
@@ -41,6 +42,7 @@ class ButtonFinder:
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
         region_length: int = 61,
+        progress_bar: bool = False,
     ) -> xr.Dataset:
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -118,7 +120,7 @@ class ButtonFinder:
         )
 
         # Run the button finding algorithm for each timestep.
-        for t, time in enumerate(assay.time):
+        for t, time in enumerate(tqdm.tqdm(assay.time, disable=not progress_bar)):
             # Preload all images for this timnepoint so we only read from disk once.
             images = assay.image.sel(time=time).to_numpy()
             points = np.empty((0, 2))
