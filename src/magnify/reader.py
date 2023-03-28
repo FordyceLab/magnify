@@ -3,6 +3,7 @@ from collections.abc import Iterator
 import collections
 import datetime
 import fnmatch
+import functools
 import glob
 import os
 import re
@@ -17,6 +18,7 @@ import xarray as xr
 
 from magnify.pipeline import Pipeline
 import magnify.registry as registry
+import magnify.utils as utils
 
 
 class Reader:
@@ -39,7 +41,9 @@ class Reader:
             if len(path_dict) == 0:
                 raise FileNotFoundError(f"The pattern {d} did not lead to any files.")
 
-            for assay_name, assay_dict in path_dict.items():
+            for assay_name, assay_dict in sorted(
+                path_dict.items(), key=lambda x: utils.natural_sort_key(x[0])
+            ):
                 # Use these variables within the loop so we don't affect other assays.
                 channel_coords = channels
                 time_coords = times
@@ -104,7 +108,7 @@ class Reader:
                 # Setup a dask array to lazyload images.
                 filenames = [path for _, path in sorted(assay_dict.items())]
 
-                def read_image(block_id):
+                def read_image(block_id, filenames):
                     block_id = block_id[: len(outer_shape)]
                     idx = np.ravel_multi_index(block_id, outer_shape)
                     with tifffile.TiffFile(filenames[idx]) as tif:
@@ -112,7 +116,7 @@ class Reader:
 
                 # Chunk the images so that each chunk represents a single file.
                 images = da.map_blocks(
-                    read_image,
+                    functools.partial(read_image, filenames=filenames),
                     dtype=dtype,
                     chunks=((tuple((1,) * size for size in outer_shape) + inner_shape)),
                 )

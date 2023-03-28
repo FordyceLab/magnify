@@ -2,6 +2,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 import inspect
+import re
 
 import cv2 as cv
 import numpy as np
@@ -49,3 +50,8 @@ def bounding_box(
 def valid_kwargs(kwargs: dict[str, Any], func: Callable) -> dict[str, Any]:
     args = list(inspect.signature(func).parameters)
     return {k: kwargs[k] for k in kwargs if k in args}
+
+
+def natural_sort_key(s: str) -> list[str]:
+    reg = re.compile("([0-9]+)")
+    return [int(text) if text.isdigit() else text.lower() for text in reg.split(s)]
