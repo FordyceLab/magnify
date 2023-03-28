@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "magnify"
-version = "0.1.9"
+version = "0.1.10"
 description = "A microscopy image processing toolkit."
 authors = ["Karl Krauth <karl.krauth@gmail.com>"]
 readme = "README.md"
