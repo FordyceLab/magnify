@@ -10,6 +10,7 @@ import re
 
 from numpy.typing import ArrayLike
 from typing import Iterator
+import bs4
 import dask.array as da
 import numpy as np
 import pandas as pd
@@ -77,27 +78,66 @@ class Reader:
 
                 # Read in a single image to get the metadata stored within the file.
                 with tifffile.TiffFile(next(iter(assay_dict.values()))) as tif:
+                    dtype = tif.series[0].dtype
+                    inner_shape = tif.series[0].shape
+                    page_shape = tif.pages[0].shape
+
                     letter_to_dim = {
                         "C": "channel",
                         "T": "time",
                         "Z": "depth",
                         "Y": "im_row",
                         "X": "im_col",
+                        "R": "tile_pos",
                     }
                     dims_in_file = [letter_to_dim[c] for c in tif.series[0].axes]
 
-                    if channel_coords is None and "channel" in dims_in_file:
+                    if (
+                        time_coords is None
+                        and tif.is_micromanager
+                        and "StartTime" in tif.micromanager_metadata["Summary"]
+                    ):
+                        # Get the time string without timezone info.
+                        time_str = tif.micromanager_metadata["Summary"]["StartTime"][:-6]
+                        start_time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
+                        if "time" in dims_in_file:
+                            planes = [
+                                pl
+                                for im in bs4.BeautifulSoup(
+                                    tif.pages[0].description, "xml"
+                                ).find_all("Image")
+                                for pl in im.find_all("Plane")
+                            ]
+                            assert all(pl.get("DeltaTUnit") == "ms" for pl in planes)
+                            time_coords = [
+                                start_time
+                                + datetime.timedelta(milliseconds=float(pl.get("DeltaT")))
+                                for pl in planes
+                            ]
+                            stride = np.prod(
+                                [
+                                    x if d not in ["im_row", "im_col", "time"] else 1
+                                    for x, d in zip(inner_shape, dims_in_file)
+                                ]
+                            )
+                            assert len(time_coords) % stride == 0
+                            time_coords = time_coords[::stride]
+                        else:
+                            time_coords = [start_time]
+                    if channel_coords is None and tif.is_micromanager:
                         channel_coords = tif.micromanager_metadata["Summary"]["ChNames"]
 
-                    if "time" in dims_in_file:
-                        raise ValueError("tiff files with a time dimension are not yet supported.")
+                    if "tile_pos" in dims_in_file:
+                        # Tiles are always saved in multiple files so ignore this dimension
+                        # since the user should specify tiles in their search path.
+                        tile_idx = dims_in_file.index("tile_pos")
+                        inner_shape = inner_shape[:tile_idx] + inner_shape[tile_idx + 1 :]
+                        dims_in_file = dims_in_file[:tile_idx] + dims_in_file[tile_idx + 1 :]
+
                     if "depth" in dims_in_file:
                         raise ValueError("tiff files with a Z dimension are not yet supported.")
                     if "im_row" not in dims_in_file or "im_col" not in dims_in_file:
                         raise ValueError("tiff files must contain an X and Y dimension.")
-
-                    dtype = tif.series[0].dtype
-                    inner_shape = tif.series[0].shape
 
                 # Check the dimensions specified in the path and inside the tiff file do not overlap.
                 if set(dims_in_file).intersection(dims_in_path):
@@ -109,20 +149,39 @@ class Reader:
                 filenames = [path for _, path in sorted(assay_dict.items())]
 
                 def read_image(block_id, filenames):
-                    block_id = block_id[: len(outer_shape)]
-                    if len(block_id) > 0:
-                        idx = np.ravel_multi_index(block_id, outer_shape)
+                    outer_id = block_id[: len(outer_shape)]
+                    inner_id = block_id[len(outer_shape) :]
+                    if len(outer_id) > 0:
+                        file_idx = np.ravel_multi_index(outer_id, outer_shape)
                     else:
                         # This is the case where we don't have indices outside the file.
-                        idx = 0
-                    with tifffile.TiffFile(filenames[idx]) as tif:
-                        return np.expand_dims(tif.asarray(), axis=tuple(range(len(block_id))))
+                        file_idx = 0
 
-                # Chunk the images so that each chunk represents a single file.
+                    with tifffile.TiffFile(filenames[file_idx]) as tif:
+                        page_ndim = len(page_shape)
+                        if len(inner_shape) > page_ndim:
+                            page_idx = np.ravel_multi_index(
+                                inner_id[:-page_ndim], inner_shape[:-page_ndim]
+                            )
+                        else:
+                            # This is the case where no dimensions correspond to page dims.
+                            page_idx = 0
+                        # Read the page from disk.
+                        page = tif.pages[page_idx].asarray()
+                        # Expand the dimensions of the block to incorporate outer dims and page index dims.
+                        return np.expand_dims(page, axis=tuple(range(len(block_id) - page_ndim)))
+
+                # Chunk the images so that each chunk represents a single page in the tiff file.
                 images = da.map_blocks(
                     functools.partial(read_image, filenames=filenames),
                     dtype=dtype,
-                    chunks=((tuple((1,) * size for size in outer_shape) + inner_shape)),
+                    chunks=(
+                        (
+                            tuple((1,) * size for size in outer_shape)
+                            + tuple((1,) * size for size in inner_shape[: -len(page_shape)])
+                            + inner_shape[-len(page_shape) :]
+                        )
+                    ),
                 )
 
                 # Set named coordinates for channels and times if they're available.
@@ -153,7 +212,7 @@ class Reader:
                 for dim in ["channel", "time", "tile_row", "tile_col", "im_row", "im_col"]:
                     if dim in assay.dims:
                         desired_order.append(dim)
-                assay.transpose(*desired_order)
+                assay = assay.transpose(*desired_order)
 
                 yield assay
 
@@ -198,11 +257,11 @@ def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
     paths = glob.glob(glob_path, recursive=True)
 
     regex_path = fnmatch.translate(pattern)
-    regex_path = regex_path.replace("\\(assay\\)", "(?P<assay>.*?)")
-    regex_path = regex_path.replace("\\(channel\\)", "(?P<channel>.*?)")
-    regex_path = re.sub(r"\\\(time\s*\|?.*?\\\)", r"(?P<time>.*?)", regex_path)
-    regex_path = regex_path.replace("\\(row\\)", "(?P<row>.*?)")
-    regex_path = regex_path.replace("\\(col\\)", "(?P<col>.*?)")
+    regex_path = regex_path.replace("\\(assay\\)", "(?P<assay>.*)")
+    regex_path = regex_path.replace("\\(channel\\)", "(?P<channel>.*)")
+    regex_path = re.sub(r"\\\(time\s*\|?.*?\\\)", r"(?P<time>.*)", regex_path)
+    regex_path = regex_path.replace("\\(row\\)", "(?P<row>.*)")
+    regex_path = regex_path.replace("\\(col\\)", "(?P<col>.*)")
     regex_path = re.compile(regex_path, re.IGNORECASE)
 
     path_dict = collections.defaultdict(dict)

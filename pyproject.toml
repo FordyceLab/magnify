@@ -21,6 +21,8 @@ types-tqdm = "^4.64"
 xarray = {extras = ["complete"], version = ">=2023.01.0"}
 dask = {extras = ["complete"], version = ">=2022.02.0"}
 catalogue = "^2.0.8"
+beautifulsoup4 = "^4.10.0"
+lxml = "^4.6.0"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=22.6.0"

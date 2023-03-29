@@ -9,7 +9,8 @@ class Stitcher:
     def __init__(self, overlap: int = 102):
         self.overlap = overlap
 
-    def __call__(self, assay: xr.Dataset) -> xr.Dataset:
+    def __call__(self, assay: xr.Dataset, overlap=102) -> xr.Dataset:
+        self.overlap = overlap
         if "tile_row" not in assay.dims and "tile_col" not in assay.dims:
             return assay
         elif "tile_row" not in assay.dims:

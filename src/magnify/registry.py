@@ -17,6 +17,8 @@ def load(name: str) -> Pipeline:
         return mrbles_pipeline()
     elif name == "beads":
         return mrbles_pipeline()
+    elif name == "imread":
+        return imread_pipeline()
     else:
         raise ValueError(f"Pipeline {name} does not exist.")
 
@@ -39,4 +41,11 @@ def mrbles_pipeline():
     pipe.add_pipe("find_beads")
     # pipe.add_pipe("background_filter")
 
+    return pipe
+
+
+def imread_pipeline():
+    pipe = Pipeline("read")
+    # pipe.add_pipe("flip_horizontal")
+    # pipe.add_pipe("stitch")
     return pipe
