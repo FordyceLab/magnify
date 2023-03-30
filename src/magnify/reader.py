@@ -101,12 +101,12 @@ class Reader:
                         time_str = tif.micromanager_metadata["Summary"]["StartTime"][:-6]
                         start_time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
                         if "time" in dims_in_file:
+                            # Only look at the first file's description since time isn't across multiple files.
                             planes = [
                                 pl
-                                for im in bs4.BeautifulSoup(
-                                    tif.pages[0].description, "xml"
-                                ).find_all("Image")
-                                for pl in im.find_all("Plane")
+                                for pl in bs4.BeautifulSoup(tif.pages[0].description, "xml")
+                                .find("Image")
+                                .find_all("Plane")
                             ]
                             assert all(pl.get("DeltaTUnit") == "ms" for pl in planes)
                             time_coords = [
@@ -114,12 +114,10 @@ class Reader:
                                 + datetime.timedelta(milliseconds=float(pl.get("DeltaT")))
                                 for pl in planes
                             ]
-                            stride = np.prod(
-                                [
-                                    x if d not in ["im_row", "im_col", "time"] else 1
-                                    for x, d in zip(inner_shape, dims_in_file)
-                                ]
-                            )
+                            if "channel" in dims_in_file:
+                                stride = inner_shape[dims_in_file.index("channel")]
+                            else:
+                                stride = 1
                             assert len(time_coords) % stride == 0
                             time_coords = time_coords[::stride]
                         else:
@@ -202,10 +200,10 @@ class Reader:
                 )
 
                 # Make sure the assay always has a time and channel dimension.
-                if "channel" not in assay.dims:
-                    assay = assay.expand_dims("channel", 0)
-                if "time" not in assay.dims:
-                    assay = assay.expand_dims("time", 1)
+                if "channel" not in assay.image.dims:
+                    assay["image"] = assay.image.expand_dims("channel", 0)
+                if "time" not in assay.image.dims:
+                    assay["image"] = assay.image.expand_dims("time", 1)
 
                 # Reorder the dimensions so they're always consistent.
                 desired_order = []
@@ -299,7 +297,7 @@ def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
 
         idx = (channel, time, row, col)
         if idx not in path_dict[assay]:
-            path_dict[assay][idx] = path
+            path_dict[assay][idx] = os.path.abspath(path)
         else:
             raise ValueError(f"{path} and {path_dict[assay][idx]} map to the same index.")
 
