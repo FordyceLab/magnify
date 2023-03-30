@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import cast
+import os
 
 import basicpy
+import tifffile
 import numpy as np
 import xarray as xr
 
@@ -20,6 +22,22 @@ class Preprocessor:
     @registry.components.register("preprocess")
     def make():
         return Preprocessor()
+
+
+@registry.components.register("flatfield_correct")
+def make_flatfield_correct():
+    def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
+        if isinstance(flatfield, str):
+            with tifffile.TiffFile(os.path.expanduser(flatfield)) as tif:
+                flatfield = tif.asarray()
+        if isinstance(darkfield, str):
+            with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
+                darkfield = tif.asarray()
+
+        assay["image"] = (assay.image - darkfield) / flatfield
+        return assay
+
+    return flatfield_correct
 
 
 @registry.components.register("flip_horizontal")
