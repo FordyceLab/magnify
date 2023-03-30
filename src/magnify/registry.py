@@ -37,6 +37,7 @@ def chip_pipeline():
 
 def mrbles_pipeline():
     pipe = Pipeline("read")
+    pipe.add_pipe("flatfield_correct")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     # pipe.add_pipe("background_filter")
