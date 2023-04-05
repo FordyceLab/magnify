@@ -43,7 +43,10 @@ def make_flatfield_correct():
 @registry.components.register("flip_horizontal")
 def make_horizontal_flip():
     def horizontal_flip(assay: xr.Dataset):
-        assay["image"] = assay.image.isel(im_col=slice(None, None, -1))
+        if "image" in assay:
+            assay["image"] = assay.image.isel(im_x=slice(None, None, -1))
+        else:
+            assay["tile"] = assay.tile.isel(tile_x=slice(None, None, -1))
         return assay
 
     return horizontal_flip

@@ -86,8 +86,8 @@ class Reader:
                         "C": "channel",
                         "T": "time",
                         "Z": "depth",
-                        "Y": "im_row",
-                        "X": "im_col",
+                        "Y": "tile_y",
+                        "X": "tile_x",
                         "R": "tile_pos",
                     }
                     dims_in_file = [letter_to_dim[c] for c in tif.series[0].axes]
@@ -134,7 +134,7 @@ class Reader:
 
                     if "depth" in dims_in_file:
                         raise ValueError("tiff files with a Z dimension are not yet supported.")
-                    if "im_row" not in dims_in_file or "im_col" not in dims_in_file:
+                    if "tile_y" not in dims_in_file or "tile_x" not in dims_in_file:
                         raise ValueError("tiff files must contain an X and Y dimension.")
 
                 # Check the dimensions specified in the path and inside the tiff file do not overlap.
@@ -143,10 +143,10 @@ class Reader:
                         "Dimensions specified in the path names and inside the tiff file overlap."
                     )
 
-                # Setup a dask array to lazyload images.
+                # Setup a dask array to lazyload image tiles.
                 filenames = [path for _, path in sorted(assay_dict.items())]
 
-                def read_image(block_id, filenames):
+                def read_tile(block_id, filenames):
                     outer_id = block_id[: len(outer_shape)]
                     inner_id = block_id[len(outer_shape) :]
                     if len(outer_id) > 0:
@@ -170,8 +170,8 @@ class Reader:
                         return np.expand_dims(page, axis=tuple(range(len(block_id) - page_ndim)))
 
                 # Chunk the images so that each chunk represents a single page in the tiff file.
-                images = da.map_blocks(
-                    functools.partial(read_image, filenames=filenames),
+                tiles = da.map_blocks(
+                    functools.partial(read_tile, filenames=filenames),
                     dtype=dtype,
                     chunks=(
                         (
@@ -182,8 +182,8 @@ class Reader:
                     ),
                 )
 
-                # Set named coordinates for channels and times if they're available.
                 coords = {}
+                # Set named coordinates for channels and times if they're available.
                 if channel_coords is not None:
                     coords["channel"] = channel_coords
                 if time_coords is not None:
@@ -191,7 +191,7 @@ class Reader:
 
                 # Put all our data into an xarray dataset.
                 assay = xr.Dataset(
-                    {"image": (dims_in_path + dims_in_file, images)},
+                    {"tile": (dims_in_path + dims_in_file, tiles)},
                     coords=coords,
                     attrs={
                         "name": assay_name,
@@ -200,15 +200,16 @@ class Reader:
                 )
 
                 # Make sure the assay always has a time and channel dimension.
-                if "channel" not in assay.image.dims:
-                    assay["image"] = assay.image.expand_dims("channel", 0)
-                if "time" not in assay.image.dims:
-                    assay["image"] = assay.image.expand_dims("time", 1)
+                if "channel" not in assay.dims:
+                    assay = assay.expand_dims("channel", 0)
+                if "time" not in assay.dims:
+                    assay = assay.expand_dims("time", 1)
 
-                # Reorder the dimensions so they're always consistent.
-                desired_order = []
-                for dim in ["channel", "time", "tile_row", "tile_col", "im_row", "im_col"]:
-                    if dim in assay.dims:
+                # Reorder the dimensions so they're always consistent and add missing dimensions.
+                desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
+                for dim in desired_order:
+                    if dim not in assay.dims:
+                        assay = assay.expand_dims(dim)
                         desired_order.append(dim)
                 assay = assay.transpose(*desired_order)
 

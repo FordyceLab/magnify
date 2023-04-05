@@ -29,6 +29,7 @@ def chip_pipeline():
     # pipe.add_pipe("preprocessor")
     pipe.add_pipe("flip_horizontal")
     pipe.add_pipe("stitch")
+    pipe.add_pipe("flip_horizontal")
     pipe.add_pipe("find_buttons")
     # pipe.add_pipe("background_filter")
 

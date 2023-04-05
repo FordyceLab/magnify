@@ -24,14 +24,14 @@ class ButtonFinder:
         min_button_radius: int = 4,
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
-        region_length: int = 61,
+        roi_length: int = 61,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
         self.min_button_radius = min_button_radius
         self.max_button_radius = max_button_radius
         self.cluster_penalty = cluster_penalty
-        self.region_length = region_length
+        self.roi_length = roi_length
 
     def __call__(
         self,
@@ -41,7 +41,7 @@ class ButtonFinder:
         min_button_radius: int = 4,
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
-        region_length: int = 61,
+        roi_length: int = 61,
         progress_bar: bool = False,
     ) -> xr.Dataset:
         self.row_dist = row_dist
@@ -49,7 +49,7 @@ class ButtonFinder:
         self.min_button_radius = min_button_radius
         self.max_button_radius = max_button_radius
         self.cluster_penalty = cluster_penalty
-        self.region_length = region_length
+        self.roi_length = roi_length
 
         num_rows, num_cols = assay.id.shape
         if isinstance(assay.search_channel, str):
@@ -68,14 +68,14 @@ class ButtonFinder:
             min_button_dist -= 1
 
         # Create the array of subimage regions.
-        regions = da.empty(
+        roi = da.empty(
             (
                 num_rows,
                 num_cols,
                 assay.dims["channel"],
                 assay.dims["time"],
-                self.region_length,
-                self.region_length,
+                self.roi_length,
+                self.roi_length,
             ),
             dtype=assay.image.dtype,
             chunks=(
@@ -83,38 +83,38 @@ class ButtonFinder:
                 1,
                 assay.dims["channel"],
                 assay.dims["time"],
-                self.region_length,
-                self.region_length,
+                self.roi_length,
+                self.roi_length,
             ),
         )
         assay = assay.assign(
-            region=(
-                ("marker_row", "marker_col", "channel", "time", "row", "col"),
-                regions,
+            roi=(
+                ("marker_row", "marker_col", "channel", "time", "roi_y", "roi_x"),
+                roi,
             ),
             fg=(
-                ("marker_row", "marker_col", "channel", "time", "row", "col"),
+                ("marker_row", "marker_col", "channel", "time", "roi_y", "roi_x"),
                 da.empty_like(
-                    regions,
+                    roi,
                     dtype=bool,
                 ),
             ),
             bg=(
-                ("marker_row", "marker_col", "channel", "time", "row", "col"),
+                ("marker_row", "marker_col", "channel", "time", "roi_y", "roi_x"),
                 da.empty_like(
-                    regions,
+                    roi,
                     dtype=bool,
                 ),
             ),
         )
         # Create the x and y coordinates arrays for each button.
-        assay = assay.assign_coords(
+        assay = assay.assign(
             x=(
-                ["marker_row", "marker_col", "time"],
+                ("marker_row", "marker_col", "time"),
                 np.empty((num_rows, num_cols, assay.dims["time"])),
             ),
             y=(
-                ["marker_row", "marker_col", "time"],
+                ("marker_row", "marker_col", "time"),
                 np.empty((num_rows, num_cols, assay.dims["time"])),
             ),
         )
@@ -218,26 +218,26 @@ class ButtonFinder:
 
             # Step 6: Extract a region around each button.
             offsets = np.empty((num_rows, num_cols, 2), dtype=int)
-            regions = np.empty(
-                (num_rows, num_cols, assay.dims["channel"], self.region_length, self.region_length),
-                dtype=assay.region.dtype,
+            roi = np.empty(
+                (num_rows, num_cols, assay.dims["channel"], self.roi_length, self.roi_length),
+                dtype=assay.roi.dtype,
             )
             for i in range(num_rows):
                 for j in range(num_cols):
                     top, bottom, left, right = utils.bounding_box(
                         round(float(assay.x[i, j, t])),
                         round(float(assay.y[i, j, t])),
-                        self.region_length,
-                        assay.dims["im_row"],
-                        assay.dims["im_col"],
+                        self.roi_length,
+                        assay.sizes["im_y"],
+                        assay.sizes["im_x"],
                     )
-                    regions[i, j] = images[:, top:bottom, left:right]
+                    roi[i, j] = images[:, top:bottom, left:right]
                     offsets[i, j] = [left, top]
-            assay.region[:, :, :, t] = regions
+            assay.roi[:, :, :, t] = roi
 
             # Step 7: Compute the foreground and background masks for all buttons.
             fg = np.empty(
-                (num_rows, num_cols, assay.dims["channel"], self.region_length, self.region_length),
+                (num_rows, num_cols, assay.dims["channel"], self.roi_length, self.roi_length),
                 dtype=bool,
             )
             bg = np.empty_like(fg)
@@ -245,7 +245,7 @@ class ButtonFinder:
                 for j in range(num_cols):
                     # TODO: This step should occur over multiple channels.
                     c = np.where(assay.channel == search_channels[0])[0][0]
-                    subimage = utils.to_uint8(regions[i, j, c])
+                    subimage = utils.to_uint8(roi[i, j, c])
                     # Filter the subimage to smooth edges and remove noise.
                     filtered = cv.bilateralFilter(
                         subimage,
@@ -280,7 +280,7 @@ class ButtonFinder:
 
                     # Set the foreground (the button) to be a circle of fixed radius.
                     fg_mask = utils.circle(
-                        self.region_length,
+                        self.roi_length,
                         row=y_rel,
                         col=x_rel,
                         radius=self.max_button_radius,
@@ -289,7 +289,7 @@ class ButtonFinder:
 
                     # Set the background to be the annulus around our foreground.
                     bg_mask = utils.circle(
-                        self.region_length,
+                        self.roi_length,
                         row=y_rel,
                         col=x_rel,
                         radius=2 * self.max_button_radius,
@@ -321,6 +321,9 @@ class ButtonFinder:
             assay.fg[:, :, :, t] = fg
             assay.bg[:, :, :, t] = bg
 
+        assay = assay.stack(marker=("marker_row", "marker_col"), create_index=False).transpose(
+            "marker", ...
+        )
         return assay
 
     @registry.components.register("find_buttons")
@@ -333,13 +336,13 @@ class BeadFinder:
         self,
         min_bead_radius: int = 10,
         max_bead_radius: int = 30,
-        region_length: int = 61,
+        roi_length: int = 61,
         param1: int = 50,
         param2: int = 30,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
-        self.region_length = region_length
+        self.roi_length = roi_length
         self.param1 = param1
         self.param2 = param2
 
@@ -348,13 +351,13 @@ class BeadFinder:
         assay: xr.Dataset,
         min_bead_radius: int = 10,
         max_bead_radius: int = 30,
-        region_length: int = 61,
+        roi_length: int = 61,
         param1: int = 50,
         param2: int = 30,
     ) -> xr.Dataset:
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
-        self.region_length = region_length
+        self.roi_length = roi_length
         self.param1 = param1
         self.param2 = param2
         if isinstance(assay.search_channel, str):
@@ -413,47 +416,47 @@ class BeadFinder:
             num_beads = len(centers)
             # Create the array of subimage regions.
             assay = assay.assign(
-                region=(
-                    ("marker", "channel", "time", "row", "col"),
+                roi=(
+                    ("marker", "channel", "time", "roi_y", "roi_x"),
                     np.empty(
                         (
                             num_beads,
                             assay.dims["channel"],
                             assay.dims["time"],
-                            self.region_length,
-                            self.region_length,
+                            self.roi_length,
+                            self.roi_length,
                         ),
                         dtype=assay.image.dtype,
                     ),
                 ),
                 fg=(
-                    ("marker", "channel", "time", "row", "col"),
+                    ("marker", "channel", "time", "roi_y", "roi_x"),
                     np.empty(
                         (
                             num_beads,
                             assay.dims["channel"],
                             assay.dims["time"],
-                            self.region_length,
-                            self.region_length,
+                            self.roi_length,
+                            self.roi_length,
                         ),
                         dtype=bool,
                     ),
                 ),
                 bg=(
-                    ("marker", "channel", "time", "row", "col"),
+                    ("marker", "channel", "time", "roi_y", "roi_x"),
                     np.empty(
                         (
                             num_beads,
                             assay.dims["channel"],
                             assay.dims["time"],
-                            self.region_length,
-                            self.region_length,
+                            self.roi_length,
+                            self.roi_length,
                         ),
                         dtype=bool,
                     ),
                 ),
             )
-            assay = assay.assign_coords(
+            assay = assay.assign(
                 x=(
                     ["marker", "time"],
                     np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
@@ -470,17 +473,15 @@ class BeadFinder:
                 top, bottom, left, right = utils.bounding_box(
                     round(float(assay.x[i, 0])),
                     round(float(assay.y[i, 0])),
-                    self.region_length,
+                    self.roi_length,
                     image.shape[-2],
                     image.shape[-1],
                 )
-                assay.region[i] = assay.image.sel(
-                    im_row=slice(top, bottom), im_col=slice(left, right)
-                )
+                assay.roi[i] = assay.image.sel(im_y=slice(top, bottom), im_x=slice(left, right))
 
                 # Set the foreground of the bead to be the circle we found.
                 fg_mask = utils.circle(
-                    self.region_length,
+                    self.roi_length,
                     row=round(float(assay.y[i, 0] - top)),
                     col=round(float(assay.x[i, 0] - left)),
                     radius=round(radii[i]),
