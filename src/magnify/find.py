@@ -467,6 +467,10 @@ class BeadFinder:
                 ),
             )
 
+            rois = np.empty(assay.roi.shape, dtype=assay.roi.dtype)
+            fgs = np.empty(assay.roi.shape, dtype=bool)
+            bgs = np.empty(assay.roi.shape, dtype=bool)
+            image = assay.image.to_numpy()
             # Compute the foreground and background masks for all buttons.
             for i in range(num_beads):
                 # Set the subimage region for this bead.
@@ -477,7 +481,7 @@ class BeadFinder:
                     image.shape[-2],
                     image.shape[-1],
                 )
-                assay.roi[i] = assay.image.sel(im_y=slice(top, bottom), im_x=slice(left, right))
+                rois[i] = image[..., top:bottom, left:right]
 
                 # Set the foreground of the bead to be the circle we found.
                 fg_mask = utils.circle(
@@ -493,9 +497,12 @@ class BeadFinder:
                 bg_mask = ~fg_mask
 
                 # Set the masked arrays with our computed masks.
-                assay.fg[i] = fg_mask
-                assay.bg[i] = bg_mask
+                fgs[i] = fg_mask
+                bgs[i] = bg_mask
 
+        assay.fg[:] = fgs
+        assay.bg[:] = bgs
+        assay.roi[:] = rois
         return assay
 
     @registry.components.register("find_beads")

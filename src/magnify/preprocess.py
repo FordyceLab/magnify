@@ -34,7 +34,7 @@ def make_flatfield_correct():
             with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
                 darkfield = tif.asarray()
 
-        assay["image"] = (assay.image - darkfield) / flatfield
+        assay["tile"] = (assay.tile - darkfield) / flatfield
         return assay
 
     return flatfield_correct

@@ -208,9 +208,9 @@ class Reader:
                 # Reorder the dimensions so they're always consistent and add missing dimensions.
                 desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
                 for dim in desired_order:
-                    if dim not in assay.dims:
-                        assay = assay.expand_dims(dim)
-                        desired_order.append(dim)
+                    if dim not in assay.tile.dims:
+                        assay["tile"] = assay.tile.expand_dims(dim)
+
                 assay = assay.transpose(*desired_order)
 
                 yield assay
