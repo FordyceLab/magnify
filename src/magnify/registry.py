@@ -32,6 +32,7 @@ def chip_pipeline():
     pipe.add_pipe("flip_horizontal")
     pipe.add_pipe("find_buttons")
     # pipe.add_pipe("background_filter")
+    pipe.add_pipe("squeeze")
 
     return pipe
 
@@ -42,12 +43,14 @@ def mrbles_pipeline():
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     # pipe.add_pipe("background_filter")
+    pipe.add_pipe("squeeze")
 
     return pipe
 
 
 def imread_pipeline():
     pipe = Pipeline("read")
-    # pipe.add_pipe("flip_horizontal")
-    # pipe.add_pipe("stitch")
+    pipe.add_pipe("flip_horizontal")
+    pipe.add_pipe("stitch")
+    pipe.add_pipe("squeeze")
     return pipe

@@ -5,6 +5,7 @@ __all__ = [
 ]
 from magnify.registry import load
 import magnify.find
+import magnify.postprocess
 import magnify.preprocess
 import magnify.reader
 import magnify.stitch
