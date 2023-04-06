@@ -246,26 +246,30 @@ class ButtonFinder:
                     # TODO: This step should occur over multiple channels.
                     c = np.where(assay.channel == search_channels[0])[0][0]
                     subimage = utils.to_uint8(roi[i, j, c])
-                    # Filter the subimage to smooth edges and remove noise.
-                    filtered = cv.bilateralFilter(
-                        subimage,
-                        d=9,
-                        sigmaColor=75,
-                        sigmaSpace=75,
-                        borderType=cv.BORDER_DEFAULT,
-                    )
 
-                    # Find any circles in the subimage.
-                    circles = cv.HoughCircles(
-                        filtered,
-                        method=cv.HOUGH_GRADIENT,
-                        dp=1,
-                        minDist=50,
-                        param1=20,
-                        param2=5,
-                        minRadius=self.min_button_radius,
-                        maxRadius=self.max_button_radius,
-                    )
+                    # Find circles to refine our button estimate unless we have a blank chamber.
+                    circles = None
+                    if assay.id[i, j] != "":
+                        # Filter the subimage to smooth edges and remove noise.
+                        filtered = cv.bilateralFilter(
+                            subimage,
+                            d=9,
+                            sigmaColor=75,
+                            sigmaSpace=75,
+                            borderType=cv.BORDER_DEFAULT,
+                        )
+
+                        # Find any circles in the subimage.
+                        circles = cv.HoughCircles(
+                            filtered,
+                            method=cv.HOUGH_GRADIENT,
+                            dp=1,
+                            minDist=50,
+                            param1=20,
+                            param2=5,
+                            minRadius=self.min_button_radius,
+                            maxRadius=self.max_button_radius,
+                        )
 
                     # Update our estimate of the button position if we found some circles.
                     if circles is not None:
