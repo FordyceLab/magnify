@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 class ButtonFinder:
     def __init__(
         self,
-        row_dist: float = 126.3,
-        col_dist: float = 233.2,
+        row_dist: float = 375 / 3.22,
+        col_dist: float = 655 / 3.22,
         min_button_radius: int = 4,
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
@@ -317,8 +317,8 @@ class ButtonFinder:
 
     @registry.components.register("find_buttons")
     def make(
-        row_dist: float = 126.3,
-        col_dist: float = 233.2,
+        row_dist: float = 375 / 3.22,
+        col_dist: float = 655 / 3.22,
         min_button_radius: int = 4,
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
