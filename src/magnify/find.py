@@ -310,9 +310,11 @@ class ButtonFinder:
             assay.fg[:, :, :, t] = fg
             assay.bg[:, :, :, t] = bg
 
-        assay = assay.stack(marker=("marker_row", "marker_col"), create_index=False).transpose(
+        assay = assay.stack(marker=("marker_row", "marker_col"), create_index=True).transpose(
             "marker", ...
         )
+        assay = assay.set_xindex("id")
+
         return assay
 
     @registry.components.register("find_buttons")
