@@ -26,5 +26,5 @@ class Stitcher:
         return assay
 
     @components.register("stitch")
-    def make():
-        return Stitcher()
+    def make(overlap: int = 102):
+        return Stitcher(overlap=overlap)

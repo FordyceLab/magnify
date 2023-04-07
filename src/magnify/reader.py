@@ -220,24 +220,21 @@ class Reader:
         return Reader()
 
 
-@registry.components.register("read_pinlist")
-def make_read_pinlist():
-    def read_pinlist(assay, pinlist, blank=""):
-        df = pd.read_csv(pinlist)
-        df["Indices"] = df["Indices"].apply(
-            lambda s: [int(x) for x in re.sub(r"[\(\)]", "", s).split(",")]
-        )
-        # Replace blanks with the empty string.
-        df["MutantID"] = df["MutantID"].replace(blank, "")
-        # Zero-index the indices.
-        cols, rows = np.array(df["Indices"].to_list()).T - 1
-        names = df["MutantID"].to_numpy(dtype=str, na_value="")
-        names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
-        names_array[rows, cols] = names
-        assay = assay.assign_coords(id=(("marker_row", "marker_col"), names_array))
-        return assay
-
-    return read_pinlist
+@registry.component("read_pinlist")
+def read_pinlist(assay, pinlist, blank=""):
+    df = pd.read_csv(pinlist)
+    df["Indices"] = df["Indices"].apply(
+        lambda s: [int(x) for x in re.sub(r"[\(\)]", "", s).split(",")]
+    )
+    # Replace blanks with the empty string.
+    df["MutantID"] = df["MutantID"].replace(blank, "")
+    # Zero-index the indices.
+    cols, rows = np.array(df["Indices"].to_list()).T - 1
+    names = df["MutantID"].to_numpy(dtype=str, na_value="")
+    names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
+    names_array[rows, cols] = names
+    assay = assay.assign_coords(id=(("marker_row", "marker_col"), names_array))
+    return assay
 
 
 def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:

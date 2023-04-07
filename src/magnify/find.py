@@ -25,6 +25,7 @@ class ButtonFinder:
         max_button_radius: int = 15,
         cluster_penalty: float = 10,
         roi_length: int = 61,
+        progress_bar: bool = False,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -32,25 +33,9 @@ class ButtonFinder:
         self.max_button_radius = max_button_radius
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
+        self.progress_bar = progress_bar
 
-    def __call__(
-        self,
-        assay: xr.Dataset,
-        row_dist: float = 126.3,
-        col_dist: float = 233.2,
-        min_button_radius: int = 4,
-        max_button_radius: int = 15,
-        cluster_penalty: float = 10,
-        roi_length: int = 61,
-        progress_bar: bool = False,
-    ) -> xr.Dataset:
-        self.row_dist = row_dist
-        self.col_dist = col_dist
-        self.min_button_radius = min_button_radius
-        self.max_button_radius = max_button_radius
-        self.cluster_penalty = cluster_penalty
-        self.roi_length = roi_length
-
+    def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         num_rows, num_cols = assay.id.shape
         if isinstance(assay.search_channel, str):
             if assay.search_channel in assay.channel:
@@ -120,7 +105,7 @@ class ButtonFinder:
         )
 
         # Run the button finding algorithm for each timestep.
-        for t, time in enumerate(tqdm.tqdm(assay.time, disable=not progress_bar)):
+        for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
             # Preload all images for this timnepoint so we only read from disk once.
             images = assay.image.sel(time=time).to_numpy()
             points = np.empty((0, 2))
@@ -331,8 +316,23 @@ class ButtonFinder:
         return assay
 
     @registry.components.register("find_buttons")
-    def make():
-        return ButtonFinder()
+    def make(
+        row_dist: float = 126.3,
+        col_dist: float = 233.2,
+        min_button_radius: int = 4,
+        max_button_radius: int = 15,
+        cluster_penalty: float = 10,
+        roi_length: int = 61,
+        progress_bar: bool = False,
+    ):
+        return ButtonFinder(
+            row_dist=row_dist,
+            col_dist=col_dist,
+            min_button_radius=min_button_radius,
+            cluster_penalty=cluster_penalty,
+            roi_length=roi_length,
+            progress_bar=progress_bar,
+        )
 
 
 class BeadFinder:
@@ -350,20 +350,7 @@ class BeadFinder:
         self.param1 = param1
         self.param2 = param2
 
-    def __call__(
-        self,
-        assay: xr.Dataset,
-        min_bead_radius: int = 10,
-        max_bead_radius: int = 30,
-        roi_length: int = 61,
-        param1: int = 50,
-        param2: int = 30,
-    ) -> xr.Dataset:
-        self.min_bead_radius = min_bead_radius
-        self.max_bead_radius = max_bead_radius
-        self.roi_length = roi_length
-        self.param1 = param1
-        self.param2 = param2
+    def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if isinstance(assay.search_channel, str):
             if assay.search_channel in assay.channel:
                 search_channels = [assay.search_channel]
@@ -510,8 +497,20 @@ class BeadFinder:
         return assay
 
     @registry.components.register("find_beads")
-    def make():
-        return BeadFinder()
+    def make(
+        min_bead_radius: int = 10,
+        max_bead_radius: int = 30,
+        roi_length: int = 61,
+        param1: int = 50,
+        param2: int = 30,
+    ):
+        return BeadFinder(
+            min_bead_radius=min_bead_radius,
+            max_bead_radius=max_bead_radius,
+            roi_length=roi_length,
+            param1=param1,
+            param2=param2,
+        )
 
 
 def cluster_1d(

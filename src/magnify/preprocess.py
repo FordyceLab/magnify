@@ -24,29 +24,23 @@ class Preprocessor:
         return Preprocessor()
 
 
-@registry.components.register("flatfield_correct")
-def make_flatfield_correct():
-    def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
-        if isinstance(flatfield, str):
-            with tifffile.TiffFile(os.path.expanduser(flatfield)) as tif:
-                flatfield = tif.asarray()
-        if isinstance(darkfield, str):
-            with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
-                darkfield = tif.asarray()
+@registry.component("flatfield_correct")
+def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
+    if isinstance(flatfield, str):
+        with tifffile.TiffFile(os.path.expanduser(flatfield)) as tif:
+            flatfield = tif.asarray()
+    if isinstance(darkfield, str):
+        with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
+            darkfield = tif.asarray()
 
-        assay["tile"] = (assay.tile - darkfield) / flatfield
-        return assay
-
-    return flatfield_correct
+    assay["tile"] = (assay.tile - darkfield) / flatfield
+    return assay
 
 
-@registry.components.register("flip_horizontal")
-def make_horizontal_flip():
-    def horizontal_flip(assay: xr.Dataset):
-        if "image" in assay:
-            assay["image"] = assay.image.isel(im_x=slice(None, None, -1))
-        else:
-            assay["tile"] = assay.tile.isel(tile_x=slice(None, None, -1))
-        return assay
-
-    return horizontal_flip
+@registry.component("horizontal_flip")
+def horizontal_flip(assay: xr.Dataset):
+    if "image" in assay:
+        assay["image"] = assay.image.isel(im_x=slice(None, None, -1))
+    else:
+        assay["tile"] = assay.tile.isel(tile_x=slice(None, None, -1))
+    return assay
