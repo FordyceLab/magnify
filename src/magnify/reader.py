@@ -221,7 +221,10 @@ class Reader:
 
 
 @registry.component("read_pinlist")
-def read_pinlist(assay, pinlist, blank=""):
+def read_pinlist(assay, pinlist, blank=None):
+    if blank is None:
+        blank = ["", "blank", "BLANK"]
+
     df = pd.read_csv(pinlist)
     df["Indices"] = df["Indices"].apply(
         lambda s: [int(x) for x in re.sub(r"[\(\)]", "", s).split(",")]
