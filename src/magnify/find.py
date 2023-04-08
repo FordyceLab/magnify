@@ -129,7 +129,7 @@ class ButtonFinder:
                 stats = stats[1:]
 
                 # Exclude large and small blobs.
-                new_points = new_points[
+                new_points = new_points[ 
                     (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
                     & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
                     & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
@@ -249,7 +249,7 @@ class ButtonFinder:
                             filtered,
                             method=cv.HOUGH_GRADIENT,
                             dp=1,
-                            minDist=50,
+                            minDist=self.roi_length / 2,
                             param1=20,
                             param2=5,
                             minRadius=self.min_button_radius,
@@ -335,7 +335,6 @@ class ButtonFinder:
             roi_length=roi_length,
             progress_bar=progress_bar,
         )
-
 
 class BeadFinder:
     def __init__(
@@ -602,7 +601,7 @@ def regress_clusters(
             weight = min(len(x), ideal_num_points[i]) / ideal_num_points[i]
             intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
         else:
-            # Just use our global estimate when we have an cluster.
+            # Just use our global estimate when we have an empty cluster.
             intercepts[i] = intercept_m * i + intercept_b
 
     return slope, intercepts

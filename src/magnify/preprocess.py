@@ -44,3 +44,11 @@ def horizontal_flip(assay: xr.Dataset):
     else:
         assay["tile"] = assay.tile.isel(tile_x=slice(None, None, -1))
     return assay
+
+@registry.component("vertical_flip")
+def vertical_flip(assay: xr.Dataset):
+    if "image" in assay:
+        assay["image"] = assay.image.isel(im_y=slice(None, None, -1))
+    else:
+        assay["tile"] = assay.tile.isel(tile_y=slice(None, None, -1))
+    return assay
