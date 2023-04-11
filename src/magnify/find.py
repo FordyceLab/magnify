@@ -26,6 +26,7 @@ class ButtonFinder:
         cluster_penalty: float = 10,
         roi_length: int = 61,
         progress_bar: bool = False,
+        search_timesteps: list[int] | None = None,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -34,6 +35,7 @@ class ButtonFinder:
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
+        self.search_timesteps = search_timesteps
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         num_rows, num_cols = assay.id.shape
@@ -47,10 +49,6 @@ class ButtonFinder:
         else:
             # We're searching across multiple channels.
             search_channels = assay.search_channel
-        min_button_dist = round(min(self.row_dist, self.col_dist) / 2)
-        if min_button_dist % 2 == 0:
-            # Certain opencv functions require an odd blocksize.
-            min_button_dist -= 1
 
         # Create the array of subimage regions.
         roi = da.empty(
@@ -106,106 +104,25 @@ class ButtonFinder:
 
         # Run the button finding algorithm for each timestep.
         for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
-            # Preload all images for this timnepoint so we only read from disk once.
-            images = assay.image.sel(time=time).to_numpy()
-            points = np.empty((0, 2))
-            for channel in search_channels:
-                c = np.where(assay.channel == channel)[0][0]
-                image = utils.to_uint8(images[c])
-                # Step 1: Find an imperfect button mask by thresholding.
-                mask = cv.adaptiveThreshold(
-                    image,
-                    maxValue=255,
-                    adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    thresholdType=cv.THRESH_BINARY,
-                    blockSize=min_button_dist,
-                    C=-1,
+            # Preload all images for this timestep so we only read from disk once.
+            images = assay.image.sel(time=time).compute()
+            # Re-use the previous button locations if the user has specified that we should only
+            # search on specific timesteps.
+            do_search = t == 0 or self.search_timesteps is None or t in self.search_timesteps
+
+            # Find button centers.
+            if do_search:
+                assay.x[..., t], assay.y[..., t] = self.find_centers(
+                    images.sel(channel=search_channels), assay
                 )
-                # Step 2: Find connected components and filter out points.
-                _, _, stats, new_points = cv.connectedComponentsWithStats(mask, connectivity=4)
+            else:
+                assay.x[..., t] = assay.x[..., t - 1]
+                assay.y[..., t] = assay.y[..., t - 1]
 
-                # Ignore the background point.
-                new_points = new_points[1:]
-                stats = stats[1:]
-
-                # Exclude large and small blobs.
-                new_points = new_points[ 
-                    (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
-                    & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
-                    & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
-                    & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
-                ]
-                # Remove points too close to other points in this channel.
-                dist_matrix = np.linalg.norm(
-                    new_points[np.newaxis] - new_points[:, np.newaxis], axis=2
-                )
-                dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
-                new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
-
-                if len(points) > 0:
-                    # Remove points too close to other points in previous channels.
-                    dist_matrix = np.linalg.norm(
-                        points[np.newaxis] - new_points[:, np.newaxis], axis=2
-                    )
-                    new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
-
-                # Add the new points to the list of seen points.
-                points = np.concatenate([points, new_points])
-
-            # Split the points into x and y components.
-            x = points[:, 0]
-            y = points[:, 1]
-
-            # Step 3: Cluster the points into distinct rows and columns.
-            # The number of buttons we expect to see per row/col can vary if we have blank buttons.
-            points_per_row = (assay.id != "").sum(dim="marker_col")
-            row_labels = cluster_1d(
-                y,
-                total_length=image.shape[0],
-                num_clusters=num_rows,
-                cluster_length=self.row_dist,
-                ideal_num_points=points_per_row,
-                penalty=self.cluster_penalty,
-            )
-            points_per_col = (assay.id != "").sum(dim="marker_row")
-            col_labels = cluster_1d(
-                x,
-                total_length=image.shape[1],
-                num_clusters=num_cols,
-                cluster_length=self.col_dist,
-                ideal_num_points=points_per_col,
-                penalty=self.cluster_penalty,
-            )
-
-            # Exclude boundary points that didn't fall into clusters.
-            in_cluster = (row_labels >= 0) & (col_labels >= 0)
-            x, y = x[in_cluster], y[in_cluster]
-            col_labels, row_labels = col_labels[in_cluster], row_labels[in_cluster]
-
-            # Step 4: Draw lines through each cluster.
-            row_slope, row_intercepts = regress_clusters(
-                x, y, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
-            )
-            # We treat column indices as y and row indices as x to avoid near-infinite slopes.
-            col_slope, col_intercepts = regress_clusters(
-                y,
-                x,
-                labels=col_labels,
-                num_clusters=num_cols,
-                ideal_num_points=points_per_col,
-            )
-
-            # Step 5: Set button locations as the intersection of each line pair.
-            assay.y[..., t] = (
-                row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]
-            ) / (1 - row_slope * col_slope)
-            assay.x[..., t] = assay.y[..., t] * col_slope + col_intercepts[np.newaxis]
-
-            # Step 6: Extract a region around each button.
+            # Extract a region around each button.
             offsets = np.empty((num_rows, num_cols, 2), dtype=int)
-            roi = np.empty(
-                (num_rows, num_cols, assay.dims["channel"], self.roi_length, self.roi_length),
-                dtype=assay.roi.dtype,
+            roi = xr.DataArray(
+                data=np.empty_like(assay.roi[:, :, :, t]), coords=assay.roi[:, :, :, t].coords
             )
             for i in range(num_rows):
                 for j in range(num_cols):
@@ -220,102 +137,202 @@ class ButtonFinder:
                     offsets[i, j] = [left, top]
             assay.roi[:, :, :, t] = roi
 
-            # Step 7: Compute the foreground and background masks for all buttons.
-            fg = np.empty(
-                (num_rows, num_cols, assay.dims["channel"], self.roi_length, self.roi_length),
-                dtype=bool,
-            )
-            bg = np.empty_like(fg)
-            for i in range(num_rows):
-                for j in range(num_cols):
-                    # TODO: This step should occur over multiple channels.
-                    c = np.where(assay.channel == search_channels[0])[0][0]
-                    subimage = utils.to_uint8(roi[i, j, c])
+            # Compute the foreground and background masks for all buttons.
+            if do_search:
+                assay.fg[:, :, :, t], assay.bg[:, :, :, t] = self.find_masks(
+                    roi.sel(channel=search_channels), offsets, t, assay
+                )
+            else:
+                assay.fg[:, :, :, t] = assay.fg[:, :, :, t - 1]
+                assay.bg[:, :, :, t] = assay.bg[:, :, :, t - 1]
 
-                    # Find circles to refine our button estimate unless we have a blank chamber.
-                    circles = None
-                    if assay.id[i, j] != "":
-                        # Filter the subimage to smooth edges and remove noise.
-                        filtered = cv.bilateralFilter(
-                            subimage,
-                            d=9,
-                            sigmaColor=75,
-                            sigmaSpace=75,
-                            borderType=cv.BORDER_DEFAULT,
-                        )
-
-                        # Find any circles in the subimage.
-                        circles = cv.HoughCircles(
-                            filtered,
-                            method=cv.HOUGH_GRADIENT,
-                            dp=1,
-                            minDist=self.roi_length / 2,
-                            param1=20,
-                            param2=5,
-                            minRadius=self.min_button_radius,
-                            maxRadius=self.max_button_radius,
-                        )
-
-                    # Update our estimate of the button position if we found some circles.
-                    if circles is not None:
-                        circles = circles[0, :, :2]
-                        point = np.array([assay.x[i, j, t], assay.y[i, j, t]]) - offsets[i, j]
-                        # Use the circle center closest to our previous estimate of the button.
-                        closest_idx = np.argmin(np.linalg.norm(circles - point, axis=1))
-                        assay.x[i, j, t], assay.y[i, j, t] = circles[closest_idx] + offsets[i, j]
-
-                    x_rel = round(float(assay.x[i, j, t])) - offsets[i, j, 0]
-                    y_rel = round(float(assay.y[i, j, t])) - offsets[i, j, 1]
-
-                    # Set the foreground (the button) to be a circle of fixed radius.
-                    fg_mask = utils.circle(
-                        self.roi_length,
-                        row=y_rel,
-                        col=x_rel,
-                        radius=self.max_button_radius,
-                        value=True,
-                    )
-
-                    # Set the background to be the annulus around our foreground.
-                    bg_mask = utils.circle(
-                        self.roi_length,
-                        row=y_rel,
-                        col=x_rel,
-                        radius=2 * self.max_button_radius,
-                        value=True,
-                    )
-                    bg_mask &= ~fg_mask
-
-                    # Refine the foreground & background by finding areas that are bright and dim.
-                    _, bright_mask = cv.threshold(
-                        subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
-                    )
-                    dim_mask = ~cv.dilate(
-                        bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
-                    )
-                    bright_mask = bright_mask.astype(bool)
-                    dim_mask = dim_mask.astype(bool)
-
-                    # If part of the button is bright then set the foreground to that bright area.
-                    if np.any(fg_mask & bright_mask):
-                        fg_mask &= bright_mask
-
-                    # The background on the other hand should not be bright.
-                    if np.any(bg_mask & dim_mask):
-                        bg_mask &= dim_mask
-
-                    fg[i, j] = fg_mask
-                    bg[i, j] = bg_mask
-
-            assay.fg[:, :, :, t] = fg
-            assay.bg[:, :, :, t] = bg
-
-        assay = assay.stack(marker=("marker_row", "marker_col"), create_index=True).transpose(
-            "marker", ...
-        )
-        assay = assay.set_xindex("id")
+        # assay = assay.stack(marker=("marker_row", "marker_col"), create_index=True).transpose(
+        #     "marker", ...
+        # )
+        # assay = assay.set_xindex("id")
 
         return assay
+
+    def find_centers(self, images: xr.DataArray, assay: xr.Dataset):
+        points = np.empty((0, 2))
+        min_button_dist = round(min(self.row_dist, self.col_dist) / 2)
+        if min_button_dist % 2 == 0:
+            # Certain opencv functions require an odd blocksize.
+            min_button_dist -= 1
+        for image in images:
+            image = utils.to_uint8(image.to_numpy())
+            # Step 1: Find an imperfect button mask by thresholding.
+            mask = cv.adaptiveThreshold(
+                image,
+                maxValue=255,
+                adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                thresholdType=cv.THRESH_BINARY,
+                blockSize=min_button_dist,
+                C=-1,
+            )
+            # Step 2: Find connected components and filter out points.
+            _, _, stats, new_points = cv.connectedComponentsWithStats(mask, connectivity=4)
+
+            # Ignore the background point.
+            new_points = new_points[1:]
+            stats = stats[1:]
+
+            # Exclude large and small blobs.
+            new_points = new_points[
+                (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
+                & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
+                & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
+                & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
+            ]
+            # Remove points too close to other points in this channel.
+            dist_matrix = np.linalg.norm(new_points[np.newaxis] - new_points[:, np.newaxis], axis=2)
+            dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
+            new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
+
+            if len(points) > 0:
+                # Remove points too close to other points in previous channels.
+                dist_matrix = np.linalg.norm(points[np.newaxis] - new_points[:, np.newaxis], axis=2)
+                new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
+
+            # Add the new points to the list of seen points.
+            points = np.concatenate([points, new_points])
+
+        # Split the points into x and y components.
+        x = points[:, 0]
+        y = points[:, 1]
+
+        # Step 3: Cluster the points into distinct rows and columns.
+        points_per_row = (assay.id != "").sum(dim="marker_col")
+        points_per_col = (assay.id != "").sum(dim="marker_row")
+        num_rows, num_cols = assay.sizes["marker_row"], assay.sizes["marker_col"]
+        row_labels = cluster_1d(
+            y,
+            total_length=image.shape[0],
+            num_clusters=num_rows,
+            cluster_length=self.row_dist,
+            ideal_num_points=points_per_row,
+            penalty=self.cluster_penalty,
+        )
+        col_labels = cluster_1d(
+            x,
+            total_length=image.shape[1],
+            num_clusters=num_cols,
+            cluster_length=self.col_dist,
+            ideal_num_points=points_per_col,
+            penalty=self.cluster_penalty,
+        )
+
+        # Exclude boundary points that didn't fall into clusters.
+        in_cluster = (row_labels >= 0) & (col_labels >= 0)
+        x, y = x[in_cluster], y[in_cluster]
+        col_labels, row_labels = col_labels[in_cluster], row_labels[in_cluster]
+
+        # Step 4: Draw lines through each cluster.
+        row_slope, row_intercepts = regress_clusters(
+            x, y, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
+        )
+        # We treat column indices as y and row indices as x to avoid near-infinite slopes.
+        col_slope, col_intercepts = regress_clusters(
+            y,
+            x,
+            labels=col_labels,
+            num_clusters=num_cols,
+            ideal_num_points=points_per_col,
+        )
+
+        # Step 5: Set button locations as the intersection of each line pair.
+        marker_y = (row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]) / (
+            1 - row_slope * col_slope
+        )
+        marker_x = marker_y * col_slope + col_intercepts[np.newaxis]
+
+        return marker_x, marker_y
+
+    def find_masks(self, roi: np.ndarray, offsets: np.ndarray, t: int, assay: xr.Dataset):
+        num_rows, num_cols = roi.shape[:2]
+        fg = np.empty_like(roi, dtype=bool)
+        bg = np.empty_like(fg)
+        for i in range(num_rows):
+            for j in range(num_cols):
+                # TODO: This step should occur over multiple channels.
+                subimage = utils.to_uint8(roi[i, j, 0].to_numpy())
+
+                # Find circles to refine our button estimate unless we have a blank chamber.
+                circles = None
+                if assay.id[i, j] != "":
+                    # Filter the subimage to smooth edges and remove noise.
+                    filtered = cv.bilateralFilter(
+                        subimage,
+                        d=9,
+                        sigmaColor=75,
+                        sigmaSpace=75,
+                        borderType=cv.BORDER_DEFAULT,
+                    )
+
+                    # Find any circles in the subimage.
+                    circles = cv.HoughCircles(
+                        filtered,
+                        method=cv.HOUGH_GRADIENT,
+                        dp=1,
+                        minDist=self.roi_length / 2,
+                        param1=20,
+                        param2=5,
+                        minRadius=self.min_button_radius,
+                        maxRadius=self.max_button_radius,
+                    )
+
+                # Update our estimate of the button position if we found some circles.
+                if circles is not None:
+                    circles = circles[0, :, :2]
+                    point = np.array([assay.x[i, j, t], assay.y[i, j, t]]) - offsets[i, j]
+                    # Use the circle center closest to our previous estimate of the button.
+                    closest_idx = np.argmin(np.linalg.norm(circles - point, axis=1))
+                    assay.x[i, j, t], assay.y[i, j, t] = circles[closest_idx] + offsets[i, j]
+
+                x_rel = round(float(assay.x[i, j, t])) - offsets[i, j, 0]
+                y_rel = round(float(assay.y[i, j, t])) - offsets[i, j, 1]
+
+                # Set the foreground (the button) to be a circle of fixed radius.
+                fg_mask = utils.circle(
+                    self.roi_length,
+                    row=y_rel,
+                    col=x_rel,
+                    radius=self.max_button_radius,
+                    value=True,
+                )
+
+                # Set the background to be the annulus around our foreground.
+                bg_mask = utils.circle(
+                    self.roi_length,
+                    row=y_rel,
+                    col=x_rel,
+                    radius=2 * self.max_button_radius,
+                    value=True,
+                )
+                bg_mask &= ~fg_mask
+
+                # Refine the foreground & background by finding areas that are bright and dim.
+                _, bright_mask = cv.threshold(
+                    subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
+                )
+                dim_mask = ~cv.dilate(
+                    bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
+                )
+                bright_mask = bright_mask.astype(bool)
+                dim_mask = dim_mask.astype(bool)
+
+                # If part of the button is bright then set the foreground to that bright area.
+                if np.any(fg_mask & bright_mask):
+                    fg_mask &= bright_mask
+
+                # The background on the other hand should not be bright.
+                if np.any(bg_mask & dim_mask):
+                    bg_mask &= dim_mask
+
+                fg[i, j] = fg_mask
+                bg[i, j] = bg_mask
+
+        return fg, bg
 
     @registry.components.register("find_buttons")
     def make(
@@ -326,6 +343,7 @@ class ButtonFinder:
         cluster_penalty: float = 10,
         roi_length: int = 61,
         progress_bar: bool = False,
+        search_timesteps: list[int] | None = None,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -334,7 +352,9 @@ class ButtonFinder:
             cluster_penalty=cluster_penalty,
             roi_length=roi_length,
             progress_bar=progress_bar,
+            search_timesteps=search_timesteps,
         )
+
 
 class BeadFinder:
     def __init__(
