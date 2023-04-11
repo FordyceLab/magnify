@@ -38,7 +38,7 @@ class Reader:
             data = [data]
 
         for d in data:
-            path_dict = extract_paths(d)
+            path_dict, info_dict = extract_paths(d)
             if len(path_dict) == 0:
                 raise FileNotFoundError(f"The pattern {d} did not lead to any files.")
 
@@ -143,8 +143,8 @@ class Reader:
                         "Dimensions specified in the path names and inside the tiff file overlap."
                     )
 
-                # Setup a dask array to lazyload image tiles.
-                filenames = [path for _, path in sorted(assay_dict.items())]
+                # Setup a dask array to lazyload image tiles and extract attributes.
+                filenames = [x for _, x in sorted(assay_dict.items())]
 
                 def read_tile(block_id, filenames):
                     outer_id = block_id[: len(outer_shape)]
@@ -188,6 +188,12 @@ class Reader:
                     coords["channel"] = channel_coords
                 if time_coords is not None:
                     coords["time"] = time_coords
+                # Get the indices specified in the info dict each in sorted order.
+                assay_info = info_dict[assay_name]
+                info_idxs, time_idxs = (sorted(set(idx)) for idx in zip(*assay_info.keys()))
+                for info_idx in info_idxs:
+                    info_vals = [assay_info[(info_idx, time_idx)] for time_idx in time_idxs]
+                    coords[info_idx] = ("time", info_vals)
 
                 # Put all our data into an xarray dataset.
                 assay = xr.Dataset(
@@ -249,19 +255,22 @@ def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
     glob_path = re.sub(r"\(time\s*\|?.*?\)", "*", glob_path)
     glob_path = glob_path.replace("(row)", "*")
     glob_path = glob_path.replace("(col)", "*")
+    glob_path = re.sub(r"\(info\s*=\s*.*?\)", "*", glob_path)
 
     # Search for files matching the pattern.
     paths = glob.glob(glob_path, recursive=True)
 
     regex_path = fnmatch.translate(pattern)
-    regex_path = regex_path.replace("\\(assay\\)", "(?P<assay>.*)")
-    regex_path = regex_path.replace("\\(channel\\)", "(?P<channel>.*)")
-    regex_path = re.sub(r"\\\(time\s*\|?.*?\\\)", r"(?P<time>.*)", regex_path)
-    regex_path = regex_path.replace("\\(row\\)", "(?P<row>.*)")
-    regex_path = regex_path.replace("\\(col\\)", "(?P<col>.*)")
+    regex_path = regex_path.replace("\\(assay\\)", "(?P<assay>.*?)")
+    regex_path = regex_path.replace("\\(channel\\)", "(?P<channel>.*?)")
+    regex_path = re.sub(r"\\\(time\s*\|?.*?\\\)", r"(?P<time>.*?)", regex_path)
+    regex_path = regex_path.replace("\\(row\\)", "(?P<row>.*?)")
+    regex_path = regex_path.replace("\\(col\\)", "(?P<col>.*?)")
+    regex_path = re.sub(r"\\\(info\s*=\s*(.*?)\\\)", r"(?P<\1>.*?)", regex_path)
     regex_path = re.compile(regex_path, re.IGNORECASE)
 
     path_dict = collections.defaultdict(dict)
+    info_dict = collections.defaultdict(dict)
     for path in paths:
         match = regex_path.fullmatch(path)
         if "(assay)" in pattern:
@@ -300,4 +309,9 @@ def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
         else:
             raise ValueError(f"{path} and {path_dict[assay][idx]} map to the same index.")
 
-    return path_dict
+        info_search = re.search(r"\(info\s*=\s*(.*?)\)", pattern)
+        if info_search:
+            for info in info_search.groups():
+                info_dict[assay][info, time] = match.group(info)
+
+    return path_dict, info_dict
