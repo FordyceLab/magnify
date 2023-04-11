@@ -190,10 +190,11 @@ class Reader:
                     coords["time"] = time_coords
                 # Get the indices specified in the info dict each in sorted order.
                 assay_info = info_dict[assay_name]
-                info_idxs, time_idxs = (sorted(set(idx)) for idx in zip(*assay_info.keys()))
-                for info_idx in info_idxs:
-                    info_vals = [assay_info[(info_idx, time_idx)] for time_idx in time_idxs]
-                    coords[info_idx] = ("time", info_vals)
+                if assay_info:
+                    info_idxs, time_idxs = (sorted(set(idx)) for idx in zip(*assay_info.keys()))
+                    for info_idx in info_idxs:
+                        info_vals = [assay_info[(info_idx, time_idx)] for time_idx in time_idxs]
+                        coords[info_idx] = ("time", info_vals)
 
                 # Put all our data into an xarray dataset.
                 assay = xr.Dataset(
