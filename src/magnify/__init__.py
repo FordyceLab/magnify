@@ -4,6 +4,7 @@ __all__ = [
     "load",
 ]
 from magnify.registry import load
+import magnify.filter
 import magnify.find
 import magnify.postprocess
 import magnify.preprocess

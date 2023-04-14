@@ -55,7 +55,7 @@ class ButtonFinder:
         # sizes so each chunk ends up being at least 10MB.
         chunk_bytes = 1e7
         # Don't take into account dtype size since fg/bg bool arrays should also be 10MB.
-        marker_bytes = assay.dims["channel"] * assay.dims["time"] * self.roi_length ** 2
+        marker_bytes = assay.dims["channel"] * assay.dims["time"] * self.roi_length**2
         # Prioritize larger row chunks since we're more likely to want whole columns than rows.
         row_chunk_size = min(math.ceil(chunk_bytes / marker_bytes), num_rows)
         col_chunk_size = math.ceil(chunk_bytes / (marker_bytes * row_chunk_size))
@@ -330,8 +330,8 @@ class ButtonFinder:
                 bright_mask = bright_mask.astype(bool)
                 dim_mask = dim_mask.astype(bool)
 
-                # If part of the button is bright then set the foreground to that bright area.
-                if np.any(fg_mask & bright_mask):
+                # If enough of the button is bright then set the foreground to that bright area.
+                if (fg_mask & bright_mask).sum() >= np.pi * self.min_button_radius**2:
                     fg_mask &= bright_mask
 
                 # The background on the other hand should not be bright.
