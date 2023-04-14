@@ -6,7 +6,7 @@ styles = {
     "whitegrid": [
         opts.Layout(shared_axes=False),
         opts.GridSpace(shared_xaxis=False, shared_yaxis=False),
-        opts.Image(invert_yaxis=True, axiswise=True),
+        opts.Image(invert_yaxis=True, axiswise=True, cmap="viridis"),
     ]
 }
 
