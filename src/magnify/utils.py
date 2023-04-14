@@ -1,11 +1,12 @@
 from __future__ import annotations
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 import inspect
 import re
 
 import cv2 as cv
 import numpy as np
+import xarray as xr
 
 
 def to_uint8(arr: np.ndarray) -> np.ndarray:
@@ -55,3 +56,19 @@ def valid_kwargs(kwargs: dict[str, Any], func: Callable) -> dict[str, Any]:
 def natural_sort_key(s: str) -> list[str]:
     reg = re.compile("([0-9]+)")
     return [int(text) if text.isdigit() else text.lower() for text in reg.split(s)]
+
+
+def to_list(x: Any) -> list:
+    if x is None:
+        return []
+    elif not isinstance(x, Iterable) or isinstance(x, str):
+        return [x]
+    else:
+        return list(x)
+
+
+def to_explicit_coords(x: xr.Dataset) -> xr.Dataset:
+    for dim in x.dims:
+        if dim not in x.coords:
+            x = x.assign_coords({dim: np.arange(x.sizes[dim])})
+    return x
