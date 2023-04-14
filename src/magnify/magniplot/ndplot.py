@@ -12,15 +12,12 @@ import magnify.utils as utils
 def ndplot(
     assay,
     plot_function,
-    grid_dims: str | list[str] | None = None,
-    slider_dims: str | list[str] | None = None,
+    grid: str | list[str] | None = None,
+    slider: str | list[str] | None = None,
     **kwargs,
 ):
-    if slider_dims is None:
-        slider_dims = ["channel", "time"]
-
-    grid = [dim for dim in utils.to_list(grid_dims) if dim in assay.dims]
-    slider = [dim for dim in utils.to_list(slider_dims) if dim in assay.dims]
+    grid = [dim for dim in utils.to_list(grid) if dim in assay.dims]
+    slider = [dim for dim in utils.to_list(slider) if dim in assay.dims]
     assay = utils.to_explicit_coords(assay)
 
     def to_holomap(subassay):
