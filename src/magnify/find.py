@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import logging
 
 from numpy.typing import ArrayLike
@@ -50,6 +51,14 @@ class ButtonFinder:
             # We're searching across multiple channels.
             search_channels = assay.search_channel
 
+        # Store all channels and timesteps for each marker in one chunk and set marker row/col
+        # sizes so each chunk ends up being at least 10MB.
+        chunk_bytes = 1e7
+        # Don't take into account dtype size since fg/bg bool arrays should also be 10MB.
+        marker_bytes = assay.dims["channel"] * assay.dims["time"] * self.roi_length ** 2
+        # Prioritize larger row chunks since we're more likely to want whole columns than rows.
+        row_chunk_size = min(math.ceil(chunk_bytes / marker_bytes), num_rows)
+        col_chunk_size = math.ceil(chunk_bytes / (marker_bytes * row_chunk_size))
         # Create the array of subimage regions.
         roi = da.empty(
             (
@@ -62,8 +71,8 @@ class ButtonFinder:
             ),
             dtype=assay.image.dtype,
             chunks=(
-                1,
-                1,
+                row_chunk_size,
+                col_chunk_size,
                 assay.dims["channel"],
                 assay.dims["time"],
                 self.roi_length,
@@ -143,8 +152,8 @@ class ButtonFinder:
                     roi.sel(channel=search_channels), offsets, t, assay
                 )
             else:
-                assay.fg[:, :, :, t] = assay.fg[:, :, :, t - 1]
-                assay.bg[:, :, :, t] = assay.bg[:, :, :, t - 1]
+                assay.fg[:, :, :, t] = assay.fg[:, :, :, t - 1].compute()
+                assay.bg[:, :, :, t] = assay.bg[:, :, :, t - 1].compute()
 
         # assay = assay.stack(marker=("marker_row", "marker_col"), create_index=True).transpose(
         #     "marker", ...
