@@ -59,6 +59,7 @@ def ps_chip_pipeline(**kwargs):
     pipe.add_pipe("find_buttons")
     # pipe.add_pipe("background_filter")
     pipe.add_pipe("squeeze")
+    pipe.add_pipe("summarize_sum")
 
     return pipe
 
@@ -78,6 +79,7 @@ def pc_chip_pipeline(**kwargs):
     pipe.add_pipe("find_buttons")
     # pipe.add_pipe("background_filter")
     pipe.add_pipe("squeeze")
+    pipe.add_pipe("summarize_sum")
 
     return pipe
 
