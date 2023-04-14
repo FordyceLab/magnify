@@ -39,7 +39,7 @@ class ButtonFinder:
         self.search_timesteps = search_timesteps
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        num_rows, num_cols = assay.id.shape
+        num_rows, num_cols = assay.mark_tag.shape
         if isinstance(assay.search_channel, str):
             if assay.search_channel in assay.channel:
                 search_channels = [assay.search_channel]
@@ -55,10 +55,10 @@ class ButtonFinder:
         # sizes so each chunk ends up being at least 10MB.
         chunk_bytes = 1e7
         # Don't take into account dtype size since fg/bg bool arrays should also be 10MB.
-        marker_bytes = assay.dims["channel"] * assay.dims["time"] * self.roi_length**2
+        mark_bytes = assay.dims["channel"] * assay.dims["time"] * self.roi_length**2
         # Prioritize larger row chunks since we're more likely to want whole columns than rows.
-        row_chunk_size = min(math.ceil(chunk_bytes / marker_bytes), num_rows)
-        col_chunk_size = math.ceil(chunk_bytes / (marker_bytes * row_chunk_size))
+        row_chunk_size = min(math.ceil(chunk_bytes / mark_bytes), num_rows)
+        col_chunk_size = math.ceil(chunk_bytes / (mark_bytes * row_chunk_size))
         # Create the array of subimage regions.
         roi = da.empty(
             (
@@ -81,18 +81,18 @@ class ButtonFinder:
         )
         assay = assay.assign(
             roi=(
-                ("marker_row", "marker_col", "channel", "time", "roi_y", "roi_x"),
+                ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
                 roi,
             ),
             fg=(
-                ("marker_row", "marker_col", "channel", "time", "roi_y", "roi_x"),
+                ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
                 da.empty_like(
                     roi,
                     dtype=bool,
                 ),
             ),
             bg=(
-                ("marker_row", "marker_col", "channel", "time", "roi_y", "roi_x"),
+                ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
                 da.empty_like(
                     roi,
                     dtype=bool,
@@ -102,11 +102,11 @@ class ButtonFinder:
         # Create the x and y coordinates arrays for each button.
         assay = assay.assign(
             x=(
-                ("marker_row", "marker_col", "time"),
+                ("mark_row", "mark_col", "time"),
                 np.empty((num_rows, num_cols, assay.dims["time"])),
             ),
             y=(
-                ("marker_row", "marker_col", "time"),
+                ("mark_row", "mark_col", "time"),
                 np.empty((num_rows, num_cols, assay.dims["time"])),
             ),
         )
@@ -155,10 +155,10 @@ class ButtonFinder:
                 assay.fg[:, :, :, t] = assay.fg[:, :, :, t - 1].compute()
                 assay.bg[:, :, :, t] = assay.bg[:, :, :, t - 1].compute()
 
-        # assay = assay.stack(marker=("marker_row", "marker_col"), create_index=True).transpose(
-        #     "marker", ...
+        # assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose(
+        #     "mark", ...
         # )
-        # assay = assay.set_xindex("id")
+        # assay = assay.set_xindex("mark_tag")
 
         return assay
 
@@ -211,9 +211,9 @@ class ButtonFinder:
         y = points[:, 1]
 
         # Step 3: Cluster the points into distinct rows and columns.
-        points_per_row = (assay.id != "").sum(dim="marker_col")
-        points_per_col = (assay.id != "").sum(dim="marker_row")
-        num_rows, num_cols = assay.sizes["marker_row"], assay.sizes["marker_col"]
+        points_per_row = (assay.mark_tag != "").sum(dim="mark_col")
+        points_per_col = (assay.mark_tag != "").sum(dim="mark_row")
+        num_rows, num_cols = assay.sizes["mark_row"], assay.sizes["mark_col"]
         row_labels = cluster_1d(
             y,
             total_length=image.shape[0],
@@ -250,12 +250,12 @@ class ButtonFinder:
         )
 
         # Step 5: Set button locations as the intersection of each line pair.
-        marker_y = (row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]) / (
+        mark_y = (row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]) / (
             1 - row_slope * col_slope
         )
-        marker_x = marker_y * col_slope + col_intercepts[np.newaxis]
+        mark_x = mark_y * col_slope + col_intercepts[np.newaxis]
 
-        return marker_x, marker_y
+        return mark_x, mark_y
 
     def find_masks(self, roi: np.ndarray, offsets: np.ndarray, t: int, assay: xr.Dataset):
         num_rows, num_cols = roi.shape[:2]
@@ -268,7 +268,7 @@ class ButtonFinder:
 
                 # Find circles to refine our button estimate unless we have a blank chamber.
                 circles = None
-                if assay.id[i, j] != "":
+                if assay.mark_tag[i, j] != "":
                     # Filter the subimage to smooth edges and remove noise.
                     filtered = cv.bilateralFilter(
                         subimage,
@@ -438,7 +438,7 @@ class BeadFinder:
             # Create the array of subimage regions.
             assay = assay.assign(
                 roi=(
-                    ("marker", "channel", "time", "roi_y", "roi_x"),
+                    ("mark", "channel", "time", "roi_y", "roi_x"),
                     np.empty(
                         (
                             num_beads,
@@ -451,7 +451,7 @@ class BeadFinder:
                     ),
                 ),
                 fg=(
-                    ("marker", "channel", "time", "roi_y", "roi_x"),
+                    ("mark", "channel", "time", "roi_y", "roi_x"),
                     np.empty(
                         (
                             num_beads,
@@ -464,7 +464,7 @@ class BeadFinder:
                     ),
                 ),
                 bg=(
-                    ("marker", "channel", "time", "roi_y", "roi_x"),
+                    ("mark", "channel", "time", "roi_y", "roi_x"),
                     np.empty(
                         (
                             num_beads,
@@ -479,11 +479,11 @@ class BeadFinder:
             )
             assay = assay.assign(
                 x=(
-                    ["marker", "time"],
+                    ["mark", "time"],
                     np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
                 ),
                 y=(
-                    ["marker", "time"],
+                    ["mark", "time"],
                     np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
                 ),
             )

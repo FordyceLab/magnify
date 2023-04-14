@@ -15,7 +15,7 @@ def relplot(
     **kwargs,
 ):
     if grid is None and slider is None:
-        slider = ["channel", "marker", "marker_row", "marker_col"]
+        slider = ["channel", "mark", "mark_row", "mark_col"]
 
     fit_func = {"linear": linear_fit}[fit_method]
 

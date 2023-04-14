@@ -247,7 +247,8 @@ def read_pinlist(assay, pinlist, blank=None):
     names = df["MutantID"].to_numpy(dtype=str, na_value="")
     names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
     names_array[rows, cols] = names
-    assay = assay.assign_coords(id=(("marker_row", "marker_col"), names_array))
+    assay = assay.assign_coords(tag=np.unique(names_array))
+    assay = assay.assign_coords(mark_tag=(("mark_row", "mark_col"), names_array))
     return assay
 
 

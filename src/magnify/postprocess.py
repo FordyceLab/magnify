@@ -1,6 +1,8 @@
+import numpy as np
 import xarray as xr
 
 import magnify.registry as registry
+import magnify.utils as utils
 
 
 @registry.component("squeeze")
@@ -10,8 +12,17 @@ def squeeze(assay: xr.Dataset):
 
 @registry.component("summarize_sum")
 def summarize_sum(assay: xr.Dataset):
-    fg_area = assay.fg.sum(dim=["roi_x", "roi_y"])
-    fg = assay.roi.where(assay.fg).sum(dim=["roi_x", "roi_y"])
-    bg = assay.roi.where(assay.bg).median(dim=["roi_x", "roi_y"]) * fg_area
-    assay["intensity"] = (fg - bg).compute()
+    fg_area = assay.fg.sum(dim=["roi_x", "roi_y"]).compute()
+    fg = assay.roi.where(assay.fg).sum(dim=["roi_x", "roi_y"]).compute()
+    bg = (assay.roi.where(assay.bg).median(dim=["roi_x", "roi_y"]) * fg_area).compute()
+    assay["mark_intensity"] = fg - bg
+
+    tag_intensity = xr.zeros_like(assay.tag, dtype=float)
+    for i, tag in enumerate(assay.tag):
+        subintensity = utils.sel_tag(fg, tag) - utils.sel_tag(bg, tag)
+        if tag != "":
+            subintensity = subintensity.where(utils.sel_tag(assay.valid, tag))
+        tag_intensity[i] = subintensity.mean()
+
+    assay["tag_intensity"] = tag_intensity
     return assay

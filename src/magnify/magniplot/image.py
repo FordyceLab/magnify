@@ -8,7 +8,7 @@ from magnify.magniplot.ndplot import ndplot
 def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
     if grid is None and slider is None:
         slider = ["channel", "time"]
-        grid = ["marker", "marker_row", "marker_col"]
+        grid = ["mark", "mark_row", "mark_col"]
 
     def imfunc(assay: xr.Dataset, **kwargs):
         img = hv.Image((assay.roi_x, assay.roi_y, assay.roi)).opts(**kwargs)
