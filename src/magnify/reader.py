@@ -196,6 +196,10 @@ class Reader:
                         info_vals = [assay_info[(info_idx, time_idx)] for time_idx in time_idxs]
                         coords[info_idx] = ("time", info_vals)
 
+                if "time" in coords:
+                    coords["time"] = pd.to_datetime(coords["time"])
+                    coords["time"] -= coords["time"][0]
+
                 # Put all our data into an xarray dataset.
                 assay = xr.Dataset(
                     {"tile": (dims_in_path + dims_in_file, tiles)},
