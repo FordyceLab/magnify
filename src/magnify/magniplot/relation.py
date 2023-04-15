@@ -8,14 +8,17 @@ from magnify.magniplot.ndplot import ndplot
 def relplot(
     assay: xr.Dataset,
     x="time.seconds",
-    y="intensity",
+    y="tag_intensity",
     fit_method="linear",
     grid=None,
     slider=None,
     **kwargs,
 ):
     if grid is None and slider is None:
-        slider = ["channel", "mark", "mark_row", "mark_col"]
+        if y == "mark_intensity":
+            slider = ["mark", "mark_row", "mark_col", "channel"]
+        else:
+            slider = ["channel", "tag"]
 
     fit_func = {"linear": linear_fit}[fit_method]
 
