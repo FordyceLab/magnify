@@ -60,6 +60,7 @@ def ps_chip_pipeline(**kwargs):
     # pipe.add_pipe("background_filter")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_noncircular")
+    pipe.add_pipe("filter_leaky")
     pipe.add_pipe("summarize_sum")
     pipe.add_pipe("squeeze")
 
@@ -82,6 +83,7 @@ def pc_chip_pipeline(**kwargs):
     # pipe.add_pipe("background_filter")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_noncircular")
+    pipe.add_pipe("filter_leaky")
     pipe.add_pipe("summarize_sum")
     pipe.add_pipe("squeeze")
 
