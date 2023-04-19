@@ -249,6 +249,12 @@ def read_pinlist(assay, pinlist, blank=None):
     names_array[rows, cols] = names
     assay = assay.assign_coords(tag=np.unique(names_array))
     assay = assay.assign_coords(mark_tag=(("mark_row", "mark_col"), names_array))
+    assay["valid"] = (
+        ("mark_row", "mark_col", "time"),
+        np.ones(
+            (assay.sizes["mark_row"], assay.sizes["mark_col"], assay.sizes["time"]), dtype=bool
+        ),
+    )
     return assay
 
 
