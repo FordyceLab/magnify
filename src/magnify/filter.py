@@ -38,8 +38,8 @@ def filter_expression(assay: xr.Dataset):
     return assay
 
 
-@registry.component("filter_noncircular")
-def filter_noncircular(assay: xr.Dataset):
+@registry.component("filter_nonround")
+def filter_nonround(assay: xr.Dataset, min_roundness: float = 0.85):
     if isinstance(assay.search_channel, str):
         if assay.search_channel in assay.channel:
             search_channels = [assay.search_channel]
@@ -60,8 +60,11 @@ def filter_noncircular(assay: xr.Dataset):
                 contours, _ = cv.findContours(fg[i, j], cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
                 perimeter = sum(cv.arcLength(c, True) for c in contours)
                 area = sum(cv.contourArea(c) for c in contours)
-                circularity = 4 * np.pi * float(areas[i, j]) / perimeter**2
-                assay.valid[i, j] &= circularity > 0.8
+                if perimeter == 0:
+                    assay.valid[i, j] = False
+                    continue
+                roundness = 4 * np.pi * float(areas[i, j]) / perimeter**2
+                assay.valid[i, j] &= roundness > min_roundness
 
     return assay
 
