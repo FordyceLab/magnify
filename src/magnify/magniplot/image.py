@@ -27,31 +27,36 @@ def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
         # Initialize image metadata.
         len_x = assay.sizes["roi_x"]
         len_y = assay.sizes["roi_y"]
-        tag_points = list(
-            zip(
-                assay.mark_tag.to_numpy().flatten(),
-                assay.x.to_numpy().flatten(),
-                assay.y.to_numpy().flatten(),
+        bounds = []
+        labels = []
+        for _, m in assay.groupby("mark"):
+            # Get the bounds of the bounding box.
+            x = m.x.item()
+            y = m.y.item()
+            bounds.append(
+                hv.Bounds((m.x - len_x / 2, m.y + len_y / 2, m.x + len_x / 2, m.y - len_y / 2))
             )
-        )
-        valid = assay.valid.to_numpy().flatten()
-        bounds = [
-            hv.Bounds((x - len_x / 2, y + len_y / 2, x + len_x / 2, y - len_y / 2))
-            for _, x, y in tag_points
-        ]
 
+            # Get the label for the bounding box.
+            tag = m.mark_tag.item()
+            row = m.mark_row.item()
+            col = m.mark_col.item()
+            labels.append((x, y - 0.55 * len_y, f"{tag} ({row}, {col})"))
+
+        valid = assay.valid.to_numpy().flatten()
         # Overlay image, bounding boxes, and labels.
         img = hv.Image((assay.im_x, assay.im_y, assay.image))
         img *= hv.Path([b for b, v in zip(bounds, valid) if v]).opts(color="green")
         img *= hv.Path([b for b, v in zip(bounds, valid) if not v]).opts(color="red")
-        img *= hv.Labels([(x, y - 0.55 * len_y, tag) for tag, x, y in tag_points])
+        img *= hv.Labels(labels)
 
         # Style the plot.
         img = img.opts(
-            opts.Path(line_width=1),
+            opts.Image(tools=["hover"]),
             opts.Labels(text_font_size="8pt", text_color="white"),
+            opts.Path(line_width=1),
         )
         return img
 
     img = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
-    return ds.rasterize(img) if rasterize else img
+    return ds.rasterize(img, line_width=1) if rasterize else img

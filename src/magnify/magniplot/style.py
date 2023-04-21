@@ -12,4 +12,5 @@ styles = {
 
 
 def set_style(name="whitegrid"):
+    hv.extension("bokeh")
     opts.defaults(*styles[name])
