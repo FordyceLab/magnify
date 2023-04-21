@@ -11,7 +11,7 @@ import xarray as xr
 
 def sel_tag(assay: xr.Dataset, tag: str):
     if "mark_row" in assay.dims:
-        assay = assay.stack(mark=("mark_row", "mark_col"), create_index=False)
+        assay = assay.stack(mark=("mark_row", "mark_col"))
         assay = assay.transpose("mark", ...)
     idxs = np.where(assay.mark_tag == tag)
     return assay.isel(mark=idxs[0])
