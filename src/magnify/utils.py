@@ -79,4 +79,18 @@ def to_explicit_coords(x: xr.Dataset) -> xr.Dataset:
     for dim in x.dims:
         if dim not in x.coords:
             x = x.assign_coords({dim: np.arange(x.sizes[dim])})
+
+    if "mark" in x.dims:
+        return x
+
+    if "mark_row" in x.dims and "mark_col" in x.dims:
+        x = x.stack(mark=("mark_row", "mark_col"))
+        x = x.transpose("mark", ...)
+    elif "mark_row" in x.dims:
+        x = x.assign_coords(mark=x.mark_row)
+        x = x.set_xindex("mark")
+    elif "mark_col" in x.dims:
+        x = x.assign_coords(mark=x.mark_col)
+        x = x.set_xindex("mark")
+
     return x

@@ -9,17 +9,18 @@ from magnify.magniplot.ndplot import ndplot
 def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
     if grid is None and slider is None:
         slider = ["channel", "time"]
-        grid = ["mark", "mark_row", "mark_col"]
+        grid = ["mark"]
 
     def imfunc(assay: xr.Dataset, **kwargs):
         img = hv.Image((assay.roi_x, assay.roi_y, assay.roi)).opts(**kwargs)
         return img
 
-    img = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
-    return ds.rasterize(img) if rasterize else img
+    plot = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
+    plot = plot.opts(opts.Image(tools=["hover"]))
+    return ds.rasterize(plot) if rasterize else img
 
 
-def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
+def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, compression_ratio=1, **kwargs):
     if grid is None and slider is None:
         slider = ["channel", "time"]
 
@@ -44,19 +45,20 @@ def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
             labels.append((x, y - 0.55 * len_y, f"{tag} ({row}, {col})"))
 
         valid = assay.valid.to_numpy().flatten()
+        img = assay.image[..., ::compression_ratio, ::compression_ratio]
         # Overlay image, bounding boxes, and labels.
-        img = hv.Image((assay.im_x, assay.im_y, assay.image))
-        img *= hv.Path([b for b, v in zip(bounds, valid) if v]).opts(color="green")
-        img *= hv.Path([b for b, v in zip(bounds, valid) if not v]).opts(color="red")
-        img *= hv.Labels(labels)
+        plot = hv.Image((img.im_x, img.im_y, img))
+        plot *= hv.Path([b for b, v in zip(bounds, valid) if v]).opts(color="green")
+        plot *= hv.Path([b for b, v in zip(bounds, valid) if not v]).opts(color="red")
+        plot *= hv.Labels(labels)
 
         # Style the plot.
-        img = img.opts(
+        plot = plot.opts(
             opts.Image(tools=["hover"]),
             opts.Labels(text_font_size="8pt", text_color="white"),
             opts.Path(line_width=1),
         )
-        return img
+        return plot
 
     img = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
     return ds.rasterize(img, line_width=1) if rasterize else img
