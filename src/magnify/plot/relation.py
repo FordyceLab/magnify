@@ -39,8 +39,10 @@ def relplot(
             return hv.Overlay([hv.Points((0, 0))])
         for name, group in assay.groupby(hue):
             l = str((int(group.mark_row), int(group.mark_col)))
-            points = hv.Points((group[x], group[y])).opts(**kwargs)
-            curve = hv.Curve((group[x], fit_func(group[x], group[y])))
+            x_v = group[x].to_numpy()
+            y_v = group[y].to_numpy()
+            points = hv.Points((x_v, y_v)).opts(**kwargs)
+            curve = hv.Curve((x_v, fit_func(x_v, y_v)))
             overlays.append(points * curve)
 
         return hv.Overlay(overlays)
