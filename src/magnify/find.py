@@ -6,8 +6,10 @@ import logging
 from numpy.typing import ArrayLike
 import cv2 as cv
 import dask.array as da
+import numba
 import numpy as np
 import scipy
+import skimage
 import tqdm
 import xarray as xr
 
@@ -380,17 +382,13 @@ class ButtonFinder:
 class BeadFinder:
     def __init__(
         self,
-        min_bead_radius: int = 10,
-        max_bead_radius: int = 30,
+        min_bead_radius: int = 5,
+        max_bead_radius: int = 25,
         roi_length: int = 61,
-        param1: int = 50,
-        param2: int = 30,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.roi_length = roi_length
-        self.param1 = param1
-        self.param2 = param2
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if isinstance(assay.search_channel, str):
@@ -405,133 +403,117 @@ class BeadFinder:
             search_channels = assay.search_channel
 
         centers = np.empty((0, 2))
-        radii = np.empty((0))
+        labels = np.zeros((assay.sizes["im_y"], assay.sizes["im_x"]), dtype=int)
         for t in assay.time:
             for search_channel in search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
-                # Filter the subimage to smooth edges and remove noise.
-                filtered = cv.bilateralFilter(
+                # Find a mask of all bright spots.
+                mask = cv.adaptiveThreshold(
                     image,
-                    d=9,
-                    sigmaColor=75,
-                    sigmaSpace=75,
-                    borderType=cv.BORDER_DEFAULT,
+                    maxValue=255,
+                    adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    thresholdType=cv.THRESH_BINARY,
+                    blockSize=2 * self.max_bead_radius + 1,
+                    C=-5,
                 )
-
-                # Find any circles in the image.
-                circles = cv.HoughCircles(
-                    filtered,
-                    method=cv.HOUGH_GRADIENT,
-                    dp=1,
-                    minDist=2 * self.min_bead_radius,
-                    param1=self.param1,
-                    param2=self.param2,
-                    minRadius=self.min_bead_radius,
-                    maxRadius=self.max_bead_radius,
+                # Find points far away from any dim spots.
+                dist = scipy.ndimage.distance_transform_edt(mask)
+                local_max = skimage.feature.peak_local_max(
+                    dist,
+                    min_distance=self.min_bead_radius,
+                    threshold_rel=self.min_bead_radius / self.max_bead_radius,
+                    labels=mask,
+                    footprint=np.ones((3, 3)),
                 )
+                max_mask = np.zeros(dist.shape, dtype=bool)
+                max_mask[tuple(local_max.T)] = True
 
-                if circles is not None:
-                    circles = circles[0]
-                    # Save circle center locations.
-                    c = circles[:, :2]
-                    if len(centers) > 0:
-                        # Remove centers too close to those we already found in another channel or time.
-                        dist_matrix = np.linalg.norm(c[np.newaxis] - centers[:, np.newaxis], axis=2)
-                        valid = np.min(dist_matrix, axis=0) > self.min_bead_radius
-                    else:
-                        valid = np.ones(len(circles), dtype=bool)
+                # Use watershed to separate touching beads.
+                markers = scipy.ndimage.label(max_mask)[0]
+                l = skimage.segmentation.watershed(-dist, markers, mask=mask)
 
-                    centers = np.concatenate([centers, c[valid]])
-                    radii = np.concatenate([radii, circles[valid, 2]])
+                # Exclude beads that we've already seen or that don't fit size criteria.
+                c = exclude_beads(l, labels, centers, self.min_bead_radius, self.max_bead_radius)
+                if len(c) > 0:
+                    centers = np.concatenate([centers, c])
 
         # Update the assay object with the beads we found.
-        if len(centers) > 0:
-            num_beads = len(centers)
-            # Create the array of subimage regions.
-            assay = assay.assign(
-                roi=(
-                    ("mark", "channel", "time", "roi_y", "roi_x"),
-                    np.empty(
-                        (
-                            num_beads,
-                            assay.dims["channel"],
-                            assay.dims["time"],
-                            self.roi_length,
-                            self.roi_length,
-                        ),
-                        dtype=assay.image.dtype,
+        num_beads = len(centers)
+        # Create the array of subimage regions.
+        assay = assay.assign(
+            roi=(
+                ("mark", "channel", "time", "roi_y", "roi_x"),
+                np.empty(
+                    (
+                        num_beads,
+                        assay.dims["channel"],
+                        assay.dims["time"],
+                        self.roi_length,
+                        self.roi_length,
                     ),
+                    dtype=assay.image.dtype,
                 ),
-                fg=(
-                    ("mark", "channel", "time", "roi_y", "roi_x"),
-                    np.empty(
-                        (
-                            num_beads,
-                            assay.dims["channel"],
-                            assay.dims["time"],
-                            self.roi_length,
-                            self.roi_length,
-                        ),
-                        dtype=bool,
+            ),
+            fg=(
+                ("mark", "channel", "time", "roi_y", "roi_x"),
+                np.empty(
+                    (
+                        num_beads,
+                        assay.dims["channel"],
+                        assay.dims["time"],
+                        self.roi_length,
+                        self.roi_length,
                     ),
+                    dtype=bool,
                 ),
-                bg=(
-                    ("mark", "channel", "time", "roi_y", "roi_x"),
-                    np.empty(
-                        (
-                            num_beads,
-                            assay.dims["channel"],
-                            assay.dims["time"],
-                            self.roi_length,
-                            self.roi_length,
-                        ),
-                        dtype=bool,
+            ),
+            bg=(
+                ("mark", "channel", "time", "roi_y", "roi_x"),
+                np.empty(
+                    (
+                        num_beads,
+                        assay.dims["channel"],
+                        assay.dims["time"],
+                        self.roi_length,
+                        self.roi_length,
                     ),
+                    dtype=bool,
                 ),
+            ),
+        )
+        assay = assay.assign(
+            x=(
+                ["mark", "time"],
+                np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
+            ),
+            y=(
+                ["mark", "time"],
+                np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
+            ),
+        )
+
+        rois = np.empty(assay.roi.shape, dtype=assay.roi.dtype)
+        fgs = np.empty(assay.roi.shape, dtype=bool)
+        bgs = np.empty(assay.roi.shape, dtype=bool)
+        image = assay.image.to_numpy()
+        # Compute the foreground and background masks for all buttons.
+        for i in range(num_beads):
+            # Set the subimage region for this bead.
+            top, bottom, left, right = utils.bounding_box(
+                round(float(assay.x[i, 0])),
+                round(float(assay.y[i, 0])),
+                self.roi_length,
+                image.shape[-2],
+                image.shape[-1],
             )
-            assay = assay.assign(
-                x=(
-                    ["mark", "time"],
-                    np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
-                ),
-                y=(
-                    ["mark", "time"],
-                    np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
-                ),
-            )
+            rois[i] = image[..., top:bottom, left:right]
 
-            rois = np.empty(assay.roi.shape, dtype=assay.roi.dtype)
-            fgs = np.empty(assay.roi.shape, dtype=bool)
-            bgs = np.empty(assay.roi.shape, dtype=bool)
-            image = assay.image.to_numpy()
-            # Compute the foreground and background masks for all buttons.
-            for i in range(num_beads):
-                # Set the subimage region for this bead.
-                top, bottom, left, right = utils.bounding_box(
-                    round(float(assay.x[i, 0])),
-                    round(float(assay.y[i, 0])),
-                    self.roi_length,
-                    image.shape[-2],
-                    image.shape[-1],
-                )
-                rois[i] = image[..., top:bottom, left:right]
+            # Set the foreground of the bead.
+            fgs[i] = labels[top:bottom, left:right] == i + 1
 
-                # Set the foreground of the bead to be the circle we found.
-                fg_mask = utils.circle(
-                    self.roi_length,
-                    row=round(float(assay.y[i, 0] - top)),
-                    col=round(float(assay.x[i, 0] - left)),
-                    radius=round(radii[i]),
-                    value=True,
-                )
-
-                # Set the background to be everything else in the region,
-                # which could include other beads.
-                bg_mask = ~fg_mask
-
-                # Set the masked arrays with our computed masks.
-                fgs[i] = fg_mask
-                bgs[i] = bg_mask
+            # Set the background to be everything else in the region,
+            # which could include other beads.
+            bgs[i] = ~fgs[i]
 
         assay.fg[:] = fgs
         assay.bg[:] = bgs
@@ -540,18 +522,14 @@ class BeadFinder:
 
     @registry.components.register("find_beads")
     def make(
-        min_bead_radius: int = 10,
-        max_bead_radius: int = 30,
+        min_bead_radius: int = 5,
+        max_bead_radius: int = 25,
         roi_length: int = 61,
-        param1: int = 50,
-        param2: int = 30,
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
             max_bead_radius=max_bead_radius,
             roi_length=roi_length,
-            param1=param1,
-            param2=param2,
         )
 
 
@@ -646,3 +624,48 @@ def regress_clusters(
             intercepts[i] = intercept_m * i + intercept_b
 
     return slope, intercepts
+
+
+@numba.jit(nopython=True)
+def exclude_beads(new_labels, labels, centers, min_bead_radius, max_bead_radius):
+    # Compute the area of each bead and their centers.
+    num_labels = new_labels.max()
+    pts = np.zeros((num_labels, 2))
+    areas = np.zeros(num_labels)
+    for i in range(new_labels.shape[0]):
+        for j in range(new_labels.shape[1]):
+            k = new_labels[i, j]
+            areas[k - 1] += 1
+            pts[k - 1, 0] += j
+            pts[k - 1, 1] += i
+    pts /= np.expand_dims(areas, axis=1)
+
+    # Mark valid beads.
+    old_max_label = labels.max()
+    curr_label = old_max_label + 1
+    label_idxs = np.zeros(num_labels)
+    new_centers = []
+    for i in range(num_labels):
+        if (areas[i] < np.pi * min_bead_radius**2) or (areas[i] > np.pi * max_bead_radius**2):
+            # Ignore incorrectly sized beads
+            continue
+        elif (
+            len(centers) > 0
+            and np.min(np.sqrt(np.sum((pts[i] - centers) ** 2, axis=1))) < 2 * min_bead_radius
+        ):
+            # Ignore beads we've already seen.
+            continue
+        else:
+            new_centers.append(pts[i])
+            label_idxs[i] = curr_label
+            curr_label += 1
+
+    # Update the global labels array.
+    for i in range(new_labels.shape[0]):
+        for j in range(new_labels.shape[1]):
+            k = new_labels[i, j]
+            if k != 0 and label_idxs[k - 1] != 0:
+                l = label_idxs[k - 1]
+                labels[i, j] = l
+
+    return new_centers
