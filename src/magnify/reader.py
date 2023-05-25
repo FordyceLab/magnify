@@ -38,13 +38,23 @@ class Reader:
             data = [data]
 
         for d in data:
-            path_dict, info_dict = extract_paths(d)
+            path_dict, meta_dict = extract_paths(
+                d, assay="str", channel="str", time="time", row="int", col="int"
+            )
             if len(path_dict) == 0:
                 raise FileNotFoundError(f"The pattern {d} did not lead to any files.")
 
-            for assay_name, assay_dict in sorted(
-                path_dict.items(), key=lambda x: utils.natural_sort_key(x[0])
-            ):
+            # None assay names should just mean a nameless assay.
+            path_dict = {("",) + k[1:] if k[0] is None else k: v for k, v in path_dict.items()}
+            assay_names = set(list(zip(*path_dict.keys()))[0])
+
+            for assay_name in sorted(assay_names, key=utils.natural_sort_key):
+                # Extract the paths for this assay and turn all Nones into -1 so sorting works.
+                assay_dict = {
+                    tuple(-1 if x is None else x for x in k[1:]): v
+                    for k, v in path_dict.items()
+                    if k[0] == assay_name
+                }
                 # Use these variables within the loop so we don't affect other assays.
                 channel_coords = channels
                 time_coords = times
@@ -188,17 +198,10 @@ class Reader:
                     coords["channel"] = channel_coords
                 if time_coords is not None:
                     coords["time"] = time_coords
-                # Get the indices specified in the info dict each in sorted order.
-                assay_info = info_dict[assay_name]
-                if assay_info:
-                    info_idxs, time_idxs = (sorted(set(idx)) for idx in zip(*assay_info.keys()))
-                    for info_idx in info_idxs:
-                        info_vals = [assay_info[(info_idx, time_idx)] for time_idx in time_idxs]
-                        coords[info_idx] = ("time", info_vals)
 
-                if "time" in coords:
-                    coords["time"] = pd.to_datetime(coords["time"])
-                    coords["time"] -= coords["time"][0]
+                # if "time" in coords:
+                #     coords["time"] = pd.to_datetime(coords["time"])
+                #     coords["time"] -= coords["time"][0]
 
                 # Put all our data into an xarray dataset.
                 assay = xr.Dataset(
@@ -224,6 +227,20 @@ class Reader:
 
                 assay = assay.transpose(*desired_order)
 
+                # Add any metadata coodinates specified by the user.
+                for (meta_name, dim), meta_idxs_dict in meta_dict.items():
+                    if dim == "time":
+                        # Make sure we're indexing using datetimes.
+                        dim_idxs = assay[dim] = pd.to_datetime(assay[dim])
+                    else:
+                        dim_idxs = assay[dim].values
+
+                    meta_idxs = [meta_idxs_dict[dim_idx] for dim_idx in dim_idxs]
+                    assay = assay.assign_coords({meta_name: (dim, meta_idxs)})
+
+                # Make sure the time dimension starts at 0 seconds.
+                assay = assay.assign_coords(time=assay.time - assay.time[0])
+
                 yield assay
 
     @registry.readers.register("read")
@@ -231,99 +248,84 @@ class Reader:
         return Reader()
 
 
-@registry.component("read_pinlist")
-def read_pinlist(assay, pinlist, blank=None):
-    if blank is None:
-        blank = ["", "blank", "BLANK"]
+def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
+    default_formatters = {
+        "": lambda x, y: x,
+        "str": lambda x, y: x,
+        "time": lambda x, y: datetime.datetime.strptime(x, y if y else "%Y%m%d-%H%M%S"),
+        "int": lambda x, y: int(x),
+        "float": lambda x, y: float(x),
+    }
 
-    df = pd.read_csv(pinlist)
-    df["Indices"] = df["Indices"].apply(
-        lambda s: [int(x) for x in re.sub(r"[\(\)]", "", s).split(",")]
-    )
-    # Replace blanks with the empty string.
-    df["MutantID"] = df["MutantID"].replace(blank, "")
-    # Zero-index the indices.
-    cols, rows = np.array(df["Indices"].to_list()).T - 1
-    names = df["MutantID"].to_numpy(dtype=str, na_value="")
-    names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
-    names_array[rows, cols] = names
-    assay = assay.assign_coords(tag=np.unique(names_array))
-    assay = assay.assign_coords(mark_tag=(("mark_row", "mark_col"), names_array))
-    assay["valid"] = (
-        ("mark_row", "mark_col", "time"),
-        np.ones(
-            (assay.sizes["mark_row"], assay.sizes["mark_col"], assay.sizes["time"]), dtype=bool
-        ),
-    )
-    return assay
+    keys = kwargs
+    # Make sure keys is always a dict whose values are formatting functions.
+    if not isinstance(keys, dict):
+        keys = {key: "str" for key in keys}
+    keys = {k: f if callable(f) else default_formatters[f] for k, f in keys.items()}
+    all_keys = list(keys)
 
-
-def extract_paths(pattern) -> dict[tuple[int, str, int, int], str]:
+    # Format the pattern so we can do a glob search and so we can use it to extract
+    # filename metadata using regexes.
     pattern = os.path.expanduser(pattern)
+    meta = collections.defaultdict(dict)
+    glob_path = pattern
+    regex_path = fnmatch.translate(pattern)
+    for key, formatter in list(keys.items()):
+        # For globs replace all named search patterns e.g.: (time|%S) with the wildcard *.
+        glob_path = re.sub(rf"\({key}.*?\)", "*", glob_path)
+        glob_path = re.sub(rf"\(.*?_{key}.*?\)", "*", glob_path)
+        # For regexes replace all named search patterns with named wildcard groups.
+        regex_path = re.sub(rf"\\\({key}.*?\\\)", rf"(?P<{key}>.*?)", regex_path)
+        regex_path = re.sub(rf"\\\((.*?)_{key}.*?\\\)", r"(?P<\1>.*?)", regex_path)
 
-    # Filter out special signifiers used for pattern matching.
-    glob_path = pattern.replace("(assay)", "*")
-    glob_path = glob_path.replace("(channel)", "*")
-    glob_path = re.sub(r"\(time\s*\|?.*?\)", "*", glob_path)
-    glob_path = glob_path.replace("(row)", "*")
-    glob_path = glob_path.replace("(col)", "*")
-    glob_path = re.sub(r"\(info\s*=\s*.*?\)", "*", glob_path)
+        # Get any associated formatting information in the named search pattern.
+        key_search = re.search(rf"\({key}(?:\s*\|\s*(.*?))?\)", pattern)
+        if key_search:
+            format_str = key_search.group(1)
+            # Rebind the function, we need to set default argument values because of closure rules.
+            keys[key] = lambda x, y=format_str, f=formatter: f(x, y)
+        else:
+            # Remove keys that weren't specified in the pattern.
+            del keys[key]
 
+        # Get meta information that provides alternate value mappings for a given key
+        # along with any formatting information e.g. (concentration_time|float).
+        meta_search = re.findall(rf"\((.*?)_{key}(?:\s*\|\s*(.*?))?(?:\s*\|\s*(.*?))?\)", pattern)
+        for name, formatter_str, format_str in meta_search:
+            meta_formatter = default_formatters[formatter_str]
+            # Once again we need to set default arguments because of closure rules in Python.
+            meta_formatter = lambda x, y=format_str, f=meta_formatter: f(x, y)
+            meta[key][name] = meta_formatter
+
+    regex_path = re.compile(regex_path, re.IGNORECASE)
     # Search for files matching the pattern.
     paths = glob.glob(glob_path, recursive=True)
 
-    regex_path = fnmatch.translate(pattern)
-    regex_path = regex_path.replace("\\(assay\\)", "(?P<assay>.*?)")
-    regex_path = regex_path.replace("\\(channel\\)", "(?P<channel>.*?)")
-    regex_path = re.sub(r"\\\(time\s*\|?.*?\\\)", r"(?P<time>.*?)", regex_path)
-    regex_path = regex_path.replace("\\(row\\)", "(?P<row>.*?)")
-    regex_path = regex_path.replace("\\(col\\)", "(?P<col>.*?)")
-    regex_path = re.sub(r"\\\(info\s*=\s*(.*?)\\\)", r"(?P<\1>.*?)", regex_path)
-    regex_path = re.compile(regex_path, re.IGNORECASE)
-
-    path_dict = collections.defaultdict(dict)
-    info_dict = collections.defaultdict(dict)
+    path_dict = {}
+    meta_dict = collections.defaultdict(dict)
     for path in paths:
         match = regex_path.fullmatch(path)
-        if "(assay)" in pattern:
-            assay = match.group("assay")
+        idxs = []
+        for key in all_keys:
+            if key in keys:
+                # First get the value for the given key for the current path.
+                idx = match.group(key)
+                formatter = keys[key]
+                idx = formatter(idx)
+                idxs.append(idx)
+                # Then get all the associated metadata for that key.
+                for name, formatter in meta[key].items():
+                    meta_idx = match.group(name)
+                    meta_dict[name, key][idx] = formatter(meta_idx)
+            else:
+                # If the key wasn't specified in the pattern we still include it in the idxs.
+                idxs.append(None)
+
+        # Keep track of which indices correspond to which paths.
+        idxs = tuple(idxs)
+        if idxs not in path_dict:
+            path_dict[idxs] = os.path.abspath(path)
         else:
-            assay = ""
+            raise ValueError(f"{path} and {path_dict[idxs]} map to the same index.")
 
-        if "(channel)" in pattern:
-            channel = match.group("channel")
-        else:
-            channel = -1
-
-        time_search = re.search(r"\(time\s*\|?\s*(.*?)\)", pattern)
-        if time_search:
-            format_str = time_search.group(1)
-            if not format_str:
-                format_str = "%Y%m%d-%H%M%S"
-            time_str = match.group("time")
-            time = datetime.datetime.strptime(time_str, format_str)
-        else:
-            time = -1
-
-        if "(row)" in pattern:
-            row = int(match.group("row"))
-        else:
-            row = -1
-
-        if "(col)" in pattern:
-            col = int(match.group("col"))
-        else:
-            col = -1
-
-        idx = (channel, time, row, col)
-        if idx not in path_dict[assay]:
-            path_dict[assay][idx] = os.path.abspath(path)
-        else:
-            raise ValueError(f"{path} and {path_dict[assay][idx]} map to the same index.")
-
-        info_search = re.search(r"\(info\s*=\s*(.*?)\)", pattern)
-        if info_search:
-            for info in info_search.groups():
-                info_dict[assay][info, time] = match.group(info)
-
-    return path_dict, info_dict
+    return path_dict, meta_dict
