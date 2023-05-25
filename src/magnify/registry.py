@@ -91,6 +91,8 @@ def mrbles_pipeline(**kwargs):
     pipe.add_pipe("vertical_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
+    pipe.add_pipe("identify_mrbles")
+    pipe.add_pipe("summarize_sum")
     pipe.add_pipe("squeeze")
 
     return pipe
