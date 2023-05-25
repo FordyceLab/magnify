@@ -6,6 +6,7 @@ __all__ = [
 from magnify.registry import load
 import magnify.filter
 import magnify.find
+import magnify.identify
 import magnify.postprocess
 import magnify.preprocess
 import magnify.reader
