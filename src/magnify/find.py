@@ -244,8 +244,8 @@ class ButtonFinder:
                     round(float(assay.x[i, j, t])),
                     round(float(assay.y[i, j, t])),
                     self.roi_length,
-                    assay.sizes["im_y"],
                     assay.sizes["im_x"],
+                    assay.sizes["im_y"],
                 )
                 roi[i, j] = images[..., top:bottom, left:right]
                 offsets[i, j] = left, top
@@ -301,8 +301,8 @@ class ButtonFinder:
                         round(float(assay.x[i, j, t])),
                         round(float(assay.y[i, j, t])),
                         self.roi_length,
-                        assay.sizes["im_y"],
                         assay.sizes["im_x"],
+                        assay.sizes["im_y"],
                     )
                     roi[i, j] = images[..., top:bottom, left:right]
                     # TODO: This step should occur over multiple channels.
@@ -503,8 +503,8 @@ class BeadFinder:
                 round(float(assay.x[i, 0])),
                 round(float(assay.y[i, 0])),
                 self.roi_length,
-                image.shape[-2],
-                image.shape[-1],
+                assay.sizes["im_x"],
+                assay.sizes["im_y"],
             )
             rois[i] = image[..., top:bottom, left:right]
 
