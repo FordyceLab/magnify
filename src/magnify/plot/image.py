@@ -3,7 +3,7 @@ import holoviews as hv
 import holoviews.operation.datashader as ds
 import xarray as xr
 
-from magnify.magniplot.ndplot import ndplot
+from magnify.plot.ndplot import ndplot
 
 
 def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
@@ -17,7 +17,7 @@ def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs)
 
     plot = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
     plot = plot.opts(opts.Image(tools=["hover"]))
-    return ds.rasterize(plot) if rasterize else img
+    return ds.rasterize(plot) if rasterize else plot
 
 
 def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, compression_ratio=1, **kwargs):

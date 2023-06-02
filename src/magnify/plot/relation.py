@@ -5,7 +5,7 @@ import scipy.stats
 import xarray as xr
 
 from magnify import utils
-from magnify.magniplot.ndplot import ndplot
+from magnify.plot.ndplot import ndplot
 
 
 def relplot(

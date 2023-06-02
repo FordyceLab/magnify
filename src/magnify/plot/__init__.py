@@ -1,3 +1,6 @@
+import holoviews as hv
+hv.extension('bokeh')
+
 __all__ = [
     "imshow",
     "ndplot",
@@ -5,9 +8,9 @@ __all__ = [
     "roishow",
     "set_style",
 ]
-from magnify.magniplot.image import roishow, imshow
-from magnify.magniplot.ndplot import ndplot
-from magnify.magniplot.relation import relplot
-from magnify.magniplot.style import set_style
+from magnify.plot.image import roishow, imshow
+from magnify.plot.ndplot import ndplot
+from magnify.plot.relation import relplot
+from magnify.plot.style import set_style
 
 set_style()
