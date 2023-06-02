@@ -57,10 +57,8 @@ def indentify_mrbles(assay, spectra, num_codes, reference="eu"):
     covs = np.zeros((num_codes, ratios.shape[1] - 1, ratios.shape[1] - 1))
     unique_tags, counts = np.unique(tags[tags != -1], return_counts=True)
     for i, t in enumerate(unique_tags[np.argsort(counts)][-num_codes:]):
-        print(t)
         means[i] = np.mean(X[tags == t], axis=0)
         covs[i] = np.cov(X[tags == t], rowvar=False)
-        print(np.sum(tags == t))
     proportions = np.ones(num_codes + 1)
     proportions[-1] = 0.1
     proportions /= proportions.sum()
