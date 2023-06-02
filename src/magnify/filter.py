@@ -97,11 +97,11 @@ def filter_leaky_buttons(assay: xr.Dataset):
         empty = fg - bg < upper_bound
         for i in range(assay.sizes["mark_row"]):
             for j in range(assay.sizes["mark_col"]):
-                if subassay.mark_tag[i, j] == "":
+                if subassay.tag[i, j] == "":
                     continue
-                if i > 0 and subassay.mark_tag[i - 1, j] == "":
+                if i > 0 and subassay.tag[i - 1, j] == "":
                     assay.valid[i, j] &= empty[i - 1, j]
-                if i < assay.sizes["mark_row"] - 1 and subassay.mark_tag[i + 1, j] == "":
+                if i < assay.sizes["mark_row"] - 1 and subassay.tag[i + 1, j] == "":
                     assay.valid[i, j] &= empty[i + 1, j]
 
     return assay

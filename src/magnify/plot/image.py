@@ -39,7 +39,7 @@ def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, compressio
             )
 
             # Get the label for the bounding box.
-            tag = m.mark_tag.item()
+            tag = m.tag.item()
             row = m.mark_row.item()
             col = m.mark_col.item()
             labels.append((x, y - 0.55 * len_y, f"{tag} ({row}, {col})"))

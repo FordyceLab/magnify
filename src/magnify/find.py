@@ -46,7 +46,7 @@ class ButtonFinder:
             self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        num_rows, num_cols = assay.mark_tag.shape
+        num_rows, num_cols = assay.tag.shape
 
         # Store all channels and timesteps for each marker in one chunk and set marker row/col
         # sizes so each chunk ends up being at least 10MB.
@@ -132,7 +132,7 @@ class ButtonFinder:
         # assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose(
         #     "mark", ...
         # )
-        # assay = assay.set_xindex("mark_tag")
+        # assay = assay.set_xindex("tag")
 
         return assay
 
@@ -185,8 +185,8 @@ class ButtonFinder:
         y = points[:, 1]
 
         # Step 3: Cluster the points into distinct rows and columns.
-        points_per_row = (assay.mark_tag != "").sum(dim="mark_col")
-        points_per_col = (assay.mark_tag != "").sum(dim="mark_row")
+        points_per_row = (assay.tag != "").sum(dim="mark_col")
+        points_per_col = (assay.tag != "").sum(dim="mark_row")
         num_rows, num_cols = assay.sizes["mark_row"], assay.sizes["mark_col"]
         row_labels = cluster_1d(
             y,
@@ -263,7 +263,7 @@ class ButtonFinder:
 
                 # Find circles to refine our button estimate unless we have a blank chamber.
                 circles = None
-                if assay.mark_tag[i, j] != "":
+                if assay.tag[i, j] != "":
                     # Filter the subimage to smooth edges and remove noise.
                     filtered = cv.bilateralFilter(
                         subimage,

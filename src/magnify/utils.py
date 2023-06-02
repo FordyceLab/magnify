@@ -13,7 +13,7 @@ def sel_tag(assay: xr.Dataset, tag: str):
     if "mark_row" in assay.dims:
         assay = assay.stack(mark=("mark_row", "mark_col"))
         assay = assay.transpose("mark", ...)
-    idxs = np.where(assay.mark_tag == tag)
+    idxs = np.where(assay.tag == tag)
     return assay.isel(mark=idxs[0])
 
 

@@ -24,8 +24,7 @@ def identify_buttons(assay, pinlist, blank=None):
     names = df["MutantID"].to_numpy(dtype=str, na_value="")
     names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
     names_array[rows, cols] = names
-    assay = assay.assign_coords(tag=np.unique(names_array))
-    assay = assay.assign_coords(mark_tag=(("mark_row", "mark_col"), names_array))
+    assay = assay.assign_coords(tag=(("mark_row", "mark_col"), names_array))
     assay["valid"] = (
         ("mark_row", "mark_col", "time"),
         np.ones(
@@ -50,15 +49,21 @@ def indentify_mrbles(assay, spectra, num_codes, reference="eu"):
     assay["ln_vol"] = (("mark", "ln"), volumes)
     assay["ln_ratio"] = (("mark", "ln"), ratios)
 
-    model = sklearn.mixture.GaussianMixture(n_components=num_codes, n_init=10).fit(ratios[:, 1:])
-    tags = model.predict(ratios[:, 1:])
+    tags = sklearn.cluster.DBSCAN(eps=1e-3, min_samples=5).fit_predict(ratios[:, 1:])
+    # tags = model.predict(ratios[:, 1:])
     X = ratios[:, 1:]
 
+    means = np.zeros((num_codes, ratios.shape[1] - 1))
+    covs = np.zeros((num_codes, ratios.shape[1] - 1, ratios.shape[1] - 1))
+    unique_tags, counts = np.unique(tags[tags != -1], return_counts=True)
+    for i, t in enumerate(unique_tags[np.argsort(counts)][-num_codes:]):
+        print(t)
+        means[i] = np.mean(X[tags == t], axis=0)
+        covs[i] = np.cov(X[tags == t], rowvar=False)
+        print(np.sum(tags == t))
     proportions = np.ones(num_codes + 1)
     proportions[-1] = 0.1
     proportions /= proportions.sum()
-    means = model.means_
-    covs = model.covariances_
     lower = np.min(X, axis=0)
     upper = np.max(X, axis=0)
     for i in range(300):
@@ -85,8 +90,7 @@ def indentify_mrbles(assay, spectra, num_codes, reference="eu"):
 
     tags = np.argmax(probs, axis=1)
 
-    assay = assay.assign_coords(tag=np.unique(tags))
-    assay = assay.assign_coords(mark_tag=("mark", tags))
+    assay = assay.assign_coords(tag=("mark", tags))
     assay["valid"] = (
         ("mark", "time"),
         np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
