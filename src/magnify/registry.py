@@ -21,7 +21,7 @@ def load(name: str, **kwargs) -> Pipeline:
     elif name == "mrbles":
         return mrbles_pipeline(**kwargs)
     elif name == "beads":
-        return mrbles_pipeline(**kwargs)
+        return beads_pipeline(**kwargs)
     elif name == "imread":
         return imread_pipeline(**kwargs)
     else:
@@ -92,6 +92,20 @@ def mrbles_pipeline(**kwargs):
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     pipe.add_pipe("identify_mrbles")
+    # pipe.add_pipe("summarize_sum")
+    pipe.add_pipe("squeeze")
+
+    return pipe
+
+
+def beads_pipeline(**kwargs):
+    pipe = Pipeline("read", config=kwargs)
+    pipe.add_pipe("flatfield_correct")
+    # pipe.add_pipe("horizontal_flip")
+    pipe.add_pipe("vertical_flip")
+    pipe.add_pipe("stitch")
+    pipe.add_pipe("find_beads")
+    # pipe.add_pipe("identify_mrbles")
     # pipe.add_pipe("summarize_sum")
     pipe.add_pipe("squeeze")
 
