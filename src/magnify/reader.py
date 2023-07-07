@@ -29,8 +29,6 @@ class Reader:
     def __call__(
         self,
         data: ArrayLike | str,
-        names: ArrayLike | str,
-        search_on: str = "all",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
@@ -207,10 +205,7 @@ class Reader:
                 assay = xr.Dataset(
                     {"tile": (dims_in_path + dims_in_file, tiles)},
                     coords=coords,
-                    attrs={
-                        "name": assay_name,
-                        "search_channel": search_on,
-                    },
+                    attrs={"name": assay_name},
                 )
 
                 # Make sure the assay always has a time and channel dimension.

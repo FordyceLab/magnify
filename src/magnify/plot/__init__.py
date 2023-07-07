@@ -1,5 +1,6 @@
 import holoviews as hv
-hv.extension('bokeh')
+
+hv.extension("bokeh")
 
 __all__ = [
     "imshow",

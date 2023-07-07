@@ -18,14 +18,10 @@ class Pipeline:
     def __call__(
         self,
         data: ArrayLike | str,
-        names: ArrayLike | str = None,
-        search_on: str = "egfp",
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> xr.Dataset | list[xr.Dataset]:
-        inputs = self.reader(
-            data=data, names=names, search_on=search_on, times=times, channels=channels
-        )
+        inputs = self.reader(data=data, times=times, channels=channels)
         assays = []
         for assay in inputs:
             for name, component in self.components:

@@ -19,6 +19,7 @@ def ndplot(
     assay = utils.to_explicit_coords(assay)
     grid = [dim for dim in utils.to_list(grid) if dim in assay.indexes]
     slider = [dim for dim in utils.to_list(slider) if dim in assay.indexes]
+
     def to_holomap(subassay):
         if slider:
             slider_coords = [subassay[dim].values for dim in slider]

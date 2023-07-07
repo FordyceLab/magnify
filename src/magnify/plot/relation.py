@@ -82,7 +82,11 @@ def exp_linear_fit(x, y):
 
     m, b, _, _, _ = scipy.stats.linregress(x, np.log(y - y.min() + 1e-5))
     theta, _ = scipy.optimize.curve_fit(
-            func, x, y, p0=(max(y[0] - y[-1], 0), 2e-4, max((y[-5] - y[-1]) / 10000, 0), y[0]),
-            bounds=((max((y[0] - y[-1]) / 2, 0), 0.0, 0.0, 0.0), (np.inf, 0.1, np.inf, np.inf)),
-            jac=jac)
+        func,
+        x,
+        y,
+        p0=(max(y[0] - y[-1], 0), 2e-4, max((y[-5] - y[-1]) / 10000, 0), y[0]),
+        bounds=((max((y[0] - y[-1]) / 2, 0), 0.0, 0.0, 0.0), (np.inf, 0.1, np.inf, np.inf)),
+        jac=jac,
+    )
     return func(x, *theta)

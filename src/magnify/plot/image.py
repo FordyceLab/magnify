@@ -20,7 +20,9 @@ def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs)
     return ds.rasterize(plot) if rasterize else plot
 
 
-def imshow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, compression_ratio=1, **kwargs):
+def imshow(
+    assay: xr.Dataset, grid=None, slider=None, rasterize=True, compression_ratio=1, **kwargs
+):
     if grid is None and slider is None:
         slider = ["channel", "time"]
 

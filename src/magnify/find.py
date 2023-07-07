@@ -385,27 +385,21 @@ class BeadFinder:
         min_bead_radius: int = 5,
         max_bead_radius: int = 25,
         roi_length: int = 61,
+        search_channel: str | list[str] = "egfp",
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.roi_length = roi_length
+        if search_channel == "all":
+            self.search_channels = assay.channel
+        else:
+            self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        if isinstance(assay.search_channel, str):
-            if assay.search_channel in assay.channel:
-                search_channels = [assay.search_channel]
-            elif assay.search_channel == "all":
-                search_channels = assay.channel
-            else:
-                raise ValueError(f"{assay.search_channel} is not a channel name.")
-        else:
-            # We're searching across multiple channels.
-            search_channels = assay.search_channel
-
         centers = np.empty((0, 2))
         labels = np.zeros((assay.sizes["im_y"], assay.sizes["im_x"]), dtype=int)
         for t in assay.time:
-            for search_channel in search_channels:
+            for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
                 # Find a mask of all bright spots.
                 mask = cv.adaptiveThreshold(

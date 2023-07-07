@@ -7,17 +7,11 @@ import magnify.registry as registry
 
 
 @registry.component("filter_expression")
-def filter_expression(assay: xr.Dataset):
-    if isinstance(assay.search_channel, str):
-        if assay.search_channel in assay.channel:
-            search_channels = [assay.search_channel]
-        elif assay.search_channel == "all":
-            search_channels = assay.channel
-        else:
-            raise ValueError(f"{assay.search_channel} is not a channel name.")
+def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None = "egfp"):
+    if search_channel == "all":
+        search_channels = assay.channel
     else:
-        # We're searching across multiple channels.
-        search_channels = assay.search_channel
+        search_channels = utils.to_list(search_channel)
 
     valid = xr.zeros_like(assay.valid, dtype=bool)
     for channel in search_channels:
@@ -39,17 +33,13 @@ def filter_expression(assay: xr.Dataset):
 
 
 @registry.component("filter_nonround")
-def filter_nonround(assay: xr.Dataset, min_roundness: float = 0.85):
-    if isinstance(assay.search_channel, str):
-        if assay.search_channel in assay.channel:
-            search_channels = [assay.search_channel]
-        elif assay.search_channel == "all":
-            search_channels = assay.channel
-        else:
-            raise ValueError(f"{assay.search_channel} is not a channel name.")
+def filter_nonround(
+    assay: xr.Dataset, min_roundness: float = 0.85, search_channel: str | list[str] | None = "egfp"
+):
+    if search_channel == "all":
+        search_channels = assay.channel
     else:
-        # We're searching across multiple channels.
-        search_channels = assay.search_channel
+        search_channels = utils.to_list(search_channel)
 
     for channel in search_channels:
         subassay = assay.isel(time=0).sel(channel=channel)
@@ -70,17 +60,11 @@ def filter_nonround(assay: xr.Dataset, min_roundness: float = 0.85):
 
 
 @registry.component("filter_leaky")
-def filter_leaky_buttons(assay: xr.Dataset):
-    if isinstance(assay.search_channel, str):
-        if assay.search_channel in assay.channel:
-            search_channels = [assay.search_channel]
-        elif assay.search_channel == "all":
-            search_channels = assay.channel
-        else:
-            raise ValueError(f"{assay.search_channel} is not a channel name.")
+def filter_leaky_buttons(assay: xr.Dataset, search_channel: str | list[str] | None = "egfp"):
+    if search_channel == "all":
+        search_channels = assay.channel
     else:
-        # We're searching across multiple channels.
-        search_channels = assay.search_channel
+        search_channels = utils.to_list(search_channel)
 
     for channel in search_channels:
         subassay = assay.isel(time=0).sel(channel=channel)
