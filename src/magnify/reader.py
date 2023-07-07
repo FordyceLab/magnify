@@ -222,7 +222,7 @@ class Reader:
 
                 assay = assay.transpose(*desired_order)
 
-                # Add any metadata coodinates specified by the user.
+                # Add any metadata coordinates specified by the user.
                 for (meta_name, dim), meta_idxs_dict in meta_dict.items():
                     if dim == "time":
                         # Make sure we're indexing using datetimes.

@@ -24,11 +24,11 @@ def identify_buttons(assay, pinlist, blank=None):
     names = df["MutantID"].to_numpy(dtype=str, na_value="")
     names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
     names_array[rows, cols] = names
-    assay = assay.assign_coords(tag=(("mark_row", "mark_col"), names_array))
-    assay["valid"] = (
-        ("mark_row", "mark_col", "time"),
-        np.ones(
-            (assay.sizes["mark_row"], assay.sizes["mark_col"], assay.sizes["time"]), dtype=bool
+    assay = assay.assign_coords(
+        tag=(("mark_row", "mark_col"), names_array),
+        valid=(
+            ("mark_row", "mark_col", "time"),
+            np.ones((names_array.shape[0], names_array.shape[1], assay.sizes["time"]), dtype=bool),
         ),
     )
     return assay
@@ -168,10 +168,9 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     # Assign each bead a code based on the clustering we just found.
     clust = np.argmax(probs, axis=1)
     tag_names.append("outlier")
-    assay = assay.assign_coords(tag=("mark", np.array(tag_names)[clust]))
-    assay["valid"] = (
-        ("mark", "time"),
-        np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
+    assay = assay.assign_coords(
+        tag=("mark", np.array(tag_names)[clust]),
+        valid=(("mark", "time"), np.ones((len(tag_names), assay.sizes["time"]), dtype=bool)),
     )
 
     return assay

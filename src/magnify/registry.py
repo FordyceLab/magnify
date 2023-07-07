@@ -59,7 +59,7 @@ def ps_chip_pipeline(**kwargs):
     pipe.add_pipe("filter_nonround")
     pipe.add_pipe("filter_leaky")
     # pipe.add_pipe("summarize_sum")
-    pipe.add_pipe("squeeze")
+    pipe.add_pipe("drop")
 
     return pipe
 
@@ -79,7 +79,7 @@ def pc_chip_pipeline(**kwargs):
     pipe.add_pipe("filter_nonround")
     pipe.add_pipe("filter_leaky")
     # pipe.add_pipe("summarize_sum")
-    pipe.add_pipe("squeeze")
+    pipe.add_pipe("drop")
 
     return pipe
 
@@ -93,7 +93,7 @@ def mrbles_pipeline(**kwargs):
     pipe.add_pipe("find_beads")
     pipe.add_pipe("identify_mrbles")
     # pipe.add_pipe("summarize_sum")
-    pipe.add_pipe("squeeze")
+    pipe.add_pipe("drop")
 
     return pipe
 
@@ -107,7 +107,7 @@ def beads_pipeline(**kwargs):
     pipe.add_pipe("find_beads")
     # pipe.add_pipe("identify_mrbles")
     # pipe.add_pipe("summarize_sum")
-    pipe.add_pipe("squeeze")
+    pipe.add_pipe("drop")
 
     return pipe
 
@@ -116,5 +116,5 @@ def imread_pipeline(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
-    pipe.add_pipe("squeeze")
+    pipe.add_pipe("drop")
     return pipe

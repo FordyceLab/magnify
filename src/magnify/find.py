@@ -76,11 +76,8 @@ class ButtonFinder:
                 self.roi_length,
             ),
         )
-        assay = assay.assign(
-            roi=(
-                ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
-                roi,
-            ),
+        assay["roi"] = (("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"), roi)
+        assay = assay.assign_coords(
             fg=(
                 ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
                 da.empty_like(
@@ -95,9 +92,6 @@ class ButtonFinder:
                     dtype=bool,
                 ),
             ),
-        )
-        # Create the x and y coordinates arrays for each button.
-        assay = assay.assign(
             x=(
                 ("mark_row", "mark_col", "time"),
                 np.empty((num_rows, num_cols, assay.dims["time"])),
@@ -114,7 +108,7 @@ class ButtonFinder:
             images = assay.image.sel(time=time).compute()
             # Re-use the previous button locations if the user has specified that we should only
             # search on specific timesteps.
-            do_search = t == 0 or t in self.search_timesteps
+            do_search = (t == 0) or (t in self.search_timesteps)
 
             # Find button centers.
             if do_search:
@@ -129,10 +123,9 @@ class ButtonFinder:
             assay.roi[:, :, :, t], assay.fg[:, :, :, t], assay.bg[:, :, :, t] = self.find_rois(
                 images, t, do_search, assay
             )
-        # assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose(
-        #     "mark", ...
-        # )
-        # assay = assay.set_xindex("tag")
+        assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose(
+            "mark", ...
+        )
 
         return assay
 
@@ -434,20 +427,20 @@ class BeadFinder:
         # Update the assay object with the beads we found.
         num_beads = len(centers)
         # Create the array of subimage regions.
-        assay = assay.assign(
-            roi=(
-                ("mark", "channel", "time", "roi_y", "roi_x"),
-                np.empty(
-                    (
-                        num_beads,
-                        assay.dims["channel"],
-                        assay.dims["time"],
-                        self.roi_length,
-                        self.roi_length,
-                    ),
-                    dtype=assay.image.dtype,
+        assay["roi"] = (
+            ("mark", "channel", "time", "roi_y", "roi_x"),
+            np.empty(
+                (
+                    num_beads,
+                    assay.dims["channel"],
+                    assay.dims["time"],
+                    self.roi_length,
+                    self.roi_length,
                 ),
+                dtype=assay.image.dtype,
             ),
+        )
+        assay = assay.assign_coords(
             fg=(
                 ("mark", "channel", "time", "roi_y", "roi_x"),
                 np.empty(
@@ -474,8 +467,6 @@ class BeadFinder:
                     dtype=bool,
                 ),
             ),
-        )
-        assay = assay.assign(
             x=(
                 ["mark", "time"],
                 np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
@@ -519,11 +510,13 @@ class BeadFinder:
         min_bead_radius: int = 5,
         max_bead_radius: int = 25,
         roi_length: int = 61,
+        search_channel: str | list[str] = "egfp",
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
             max_bead_radius=max_bead_radius,
             roi_length=roi_length,
+            search_channel=search_channel,
         )
 
 
