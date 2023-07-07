@@ -3,7 +3,7 @@ __version__ = "0.3.5"
 __all__ = [
     "load",
 ]
-from magnify.registry import load
+from magnify.registry import *
 import magnify.filter
 import magnify.find
 import magnify.identify

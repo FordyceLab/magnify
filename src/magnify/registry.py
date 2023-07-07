@@ -13,21 +13,6 @@ readers = catalogue.create("magnify", "readers")
 components = catalogue.create("magnify", "components")
 
 
-def load(name: str, **kwargs) -> Pipeline:
-    if name == "ps-chip":
-        return ps_chip_pipeline(**kwargs)
-    elif name == "pc-chip":
-        return pc_chip_pipeline(**kwargs)
-    elif name == "mrbles":
-        return mrbles_pipeline(**kwargs)
-    elif name == "beads":
-        return beads_pipeline(**kwargs)
-    elif name == "imread":
-        return imread_pipeline(**kwargs)
-    else:
-        raise ValueError(f"Pipeline {name} does not exist.")
-
-
 def component(name):
     def component_decorator(func):
         @functools.wraps(func)
@@ -44,7 +29,7 @@ def component(name):
     return component_decorator
 
 
-def ps_chip_pipeline(**kwargs):
+def ps_chip(**kwargs):
     # Button centers are apart 375um vertically and 655um horizontally.
     # Assuming a 4x objective and 2x2 binning each pixel is 3.22um.
     defaults = confection.Config(dict(row_dist=375 / 3.22, col_dist=655 / 3.22))
@@ -58,13 +43,12 @@ def ps_chip_pipeline(**kwargs):
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
     pipe.add_pipe("filter_leaky")
-    # pipe.add_pipe("summarize_sum")
     pipe.add_pipe("drop")
 
     return pipe
 
 
-def pc_chip_pipeline(**kwargs):
+def pc_chip(**kwargs):
     # Button centers are apart 412um vertically and 760um horizontally.
     # Assuming a 4x objective and 2x2 binning each pixel is 3.22um.
     defaults = confection.Config(dict(row_dist=412 / 3.22, col_dist=760 / 3.22))
@@ -78,41 +62,35 @@ def pc_chip_pipeline(**kwargs):
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
     pipe.add_pipe("filter_leaky")
-    # pipe.add_pipe("summarize_sum")
     pipe.add_pipe("drop")
 
     return pipe
 
 
-def mrbles_pipeline(**kwargs):
+def mrbles(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
-    # pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("vertical_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     pipe.add_pipe("identify_mrbles")
-    # pipe.add_pipe("summarize_sum")
     pipe.add_pipe("drop")
 
     return pipe
 
 
-def beads_pipeline(**kwargs):
+def beads(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
-    # pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("vertical_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
-    # pipe.add_pipe("identify_mrbles")
-    # pipe.add_pipe("summarize_sum")
     pipe.add_pipe("drop")
 
     return pipe
 
 
-def imread_pipeline(**kwargs):
+def image(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
