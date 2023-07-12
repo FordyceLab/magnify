@@ -40,12 +40,12 @@ class ButtonFinder:
         self.roi_length = roi_length
         self.progress_bar = progress_bar
         self.search_timesteps = utils.to_list(search_timestep)
-        if search_channel == "all":
-            self.search_channels = assay.channel
-        else:
-            self.search_channels = utils.to_list(search_channel)
+        self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
+        if not self.search_channels:
+            self.search_channels = assay.channel
+
         num_rows, num_cols = assay.tag.shape
 
         # Store all channels and timesteps for each marker in one chunk and set marker row/col
@@ -358,7 +358,7 @@ class ButtonFinder:
         roi_length: int = 61,
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
-        search_channel: str | list[str] = "egfp",
+        search_channel: str | list[str] | None = None,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -378,17 +378,17 @@ class BeadFinder:
         min_bead_radius: int = 5,
         max_bead_radius: int = 25,
         roi_length: int = 61,
-        search_channel: str | list[str] = "egfp",
+        search_channel: str | list[str] | None = None,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.roi_length = roi_length
-        if search_channel == "all":
-            self.search_channels = assay.channel
-        else:
-            self.search_channels = utils.to_list(search_channel)
+        self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
+        if not self.search_channels:
+            self.search_channels = assay.channel
+
         centers = np.empty((0, 2))
         labels = np.zeros((assay.sizes["im_y"], assay.sizes["im_x"]), dtype=int)
         for t in assay.time:
@@ -510,7 +510,7 @@ class BeadFinder:
         min_bead_radius: int = 5,
         max_bead_radius: int = 25,
         roi_length: int = 61,
-        search_channel: str | list[str] = "egfp",
+        search_channel: str | list[str] | None = None,
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
