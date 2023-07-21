@@ -15,8 +15,10 @@ def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs)
         grid = ["mark"]
 
     def imfunc(assay: xr.Dataset, **kwargs):
-        img = hv.Image((assay.roi_x, assay.roi_y, assay.roi)).opts(**kwargs)
-        return img
+        contours = get_contours(assay)
+        plot = hv.Image((assay.roi_x, assay.roi_y, assay.roi)).opts(**kwargs)
+        plot *= hv.Path(contours).opts(color="red")
+        return plot
 
     plot = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
     plot = plot.opts(opts.Image(tools=["hover"]))
@@ -51,20 +53,10 @@ def imshow(
             if contour_type == "roi":
                 contours.append(hv.Bounds((left, bottom, right, top)))
             elif contour_type == "fg":
-                # First figure out the contours based on the foreground within the ROI.
-                fg_contours, _ = cv.findContours(
-                    m.fg.to_numpy().astype("uint8"),
-                    cv.RETR_EXTERNAL,
-                    cv.CHAIN_APPROX_SIMPLE,
-                )
-                for c in fg_contours:
-                    # Remove the extra dimension inserted by opencv.
-                    c = c[:, 0]
-                    # Adjust contours to be in image coordinates.
-                    c = np.array(c) + [left, top]
-                    # Close the curve.
-                    c = np.append(c, [c[0]], axis=0)
-                    contours.append(c)
+                cont = get_contours(m)
+                # Adjust contours to be in image coordinates.
+                cont = [c + [left, top] for c in cont]
+                contours += cont
 
             # Get the label for the bounding box.
             if "tag" in m:
@@ -98,3 +90,16 @@ def imshow(
 
     img = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
     return ds.rasterize(img, line_width=1) if rasterize else img
+
+
+def get_contours(xp):
+    contours, _ = cv.findContours(
+        xp.fg.to_numpy().astype("uint8"),
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE,
+    )
+    # Remove the extra dimension inserted by opencv.
+    contours = [c[:, 0] for c in contours]
+    # Close the curves.
+    contours = [np.append(c, [c[0]], axis=0) for c in contours]
+    return contours
