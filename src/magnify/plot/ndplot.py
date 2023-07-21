@@ -16,7 +16,6 @@ def ndplot(
     slider: str | list[str] | None = None,
     **kwargs,
 ):
-    assay = utils.to_explicit_coords(assay)
     grid = [dim for dim in utils.to_list(grid) if dim in assay.indexes]
     slider = [dim for dim in utils.to_list(slider) if dim in assay.indexes]
 
