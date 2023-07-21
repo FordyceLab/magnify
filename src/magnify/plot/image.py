@@ -9,7 +9,7 @@ from magnify.plot.ndplot import ndplot
 import magnify.utils as utils
 
 
-def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=True, **kwargs):
+def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=False, **kwargs):
     if grid is None and slider is None:
         slider = ["channel", "time"]
         grid = ["mark"]
