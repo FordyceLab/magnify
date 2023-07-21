@@ -171,7 +171,6 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     tag_names.append("outlier")
     assay = assay.assign_coords(
         tag=("mark", np.array(tag_names)[clust]),
-        valid=(("mark", "time"), np.ones((len(tag_names), assay.sizes["time"]), dtype=bool)),
     )
 
     return assay

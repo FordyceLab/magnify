@@ -123,9 +123,7 @@ class ButtonFinder:
             assay.roi[:, :, :, t], assay.fg[:, :, :, t], assay.bg[:, :, :, t] = self.find_rois(
                 images, t, do_search, assay
             )
-        assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose(
-            "mark", ...
-        )
+        assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose("mark", ...)
 
         return assay
 
@@ -503,6 +501,12 @@ class BeadFinder:
         assay.fg[:] = fgs
         assay.bg[:] = bgs
         assay.roi[:] = rois
+        assay = assay.assign_coords(
+            valid=(
+                ("mark", "time"),
+                np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
+            ),
+        )
         return assay
 
     @registry.components.register("find_beads")
