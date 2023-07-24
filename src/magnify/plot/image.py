@@ -39,46 +39,47 @@ def imshow(
         slider = ["channel", "time"]
 
     def imfunc(assay: xr.Dataset, **kwargs):
-        # Initialize image metadata.
-        len_x = assay.sizes["roi_x"]
-        len_y = assay.sizes["roi_y"]
-        contours = []
-        labels = []
-        for idx, m in assay.groupby("mark"):
-            # Get the centers and the bounds of the bounding box.
-            top, bottom, left, right = utils.bounding_box(
-                m.x, m.y, len_x, assay.sizes["im_x"], assay.sizes["im_y"]
-            )
-            # Contours are either roi bounding boxes or contours around the foreground.
-            if contour_type == "roi":
-                contours.append(hv.Bounds((left, bottom, right, top)))
-            elif contour_type == "fg":
-                cont = get_contours(m)
-                # Adjust contours to be in image coordinates.
-                cont = [c + [left, top] for c in cont]
-                contours += cont
-
-            # Get the label for the bounding box.
-            if "tag" in m:
-                tag = m.tag.item()
-            else:
-                tag = ""
-            if "mark_row" in m:
-                row = m.mark_row.item()
-                col = m.mark_col.item()
-                labels.append((m.x, m.y - 0.05 * len_y, f"{tag} ({row}, {col})"))
-            else:
-                labels.append((m.x, m.y - 0.05 * len_y, f"{tag} ({idx})"))
-
-        valid = assay.valid.to_numpy().flatten()
         img = assay.image[..., ::compression_ratio, ::compression_ratio]
-        # Overlay image, bounding boxes, and labels.
         plot = hv.Image((img.im_x, img.im_y, img))
-        plot *= hv.Path([b for b, v in zip(contours, valid) if v]).opts(color="green")
-        plot *= hv.Path([b for b, v in zip(contours, valid) if not v]).opts(color="red")
-        if show_centers:
-            plot *= hv.Points((assay.x, assay.y)).opts(size=2, color="red")
-        plot *= hv.Labels(labels)
+        if "roi" in assay:
+            # Initialize image metadata.
+            len_x = assay.sizes["roi_x"]
+            len_y = assay.sizes["roi_y"]
+            contours = []
+            labels = []
+            for idx, m in assay.groupby("mark"):
+                # Get the centers and the bounds of the bounding box.
+                top, bottom, left, right = utils.bounding_box(
+                    m.x, m.y, len_x, assay.sizes["im_x"], assay.sizes["im_y"]
+                )
+                # Contours are either roi bounding boxes or contours around the foreground.
+                if contour_type == "roi":
+                    contours.append(hv.Bounds((left, bottom, right, top)))
+                elif contour_type == "fg":
+                    cont = get_contours(m)
+                    # Adjust contours to be in image coordinates.
+                    cont = [c + [left, top] for c in cont]
+                    contours += cont
+
+                # Get the label for the bounding box.
+                if "tag" in m:
+                    tag = m.tag.item()
+                else:
+                    tag = ""
+                if "mark_row" in m:
+                    row = m.mark_row.item()
+                    col = m.mark_col.item()
+                    labels.append((m.x, m.y - 0.05 * len_y, f"{tag} ({row}, {col})"))
+                else:
+                    labels.append((m.x, m.y - 0.05 * len_y, f"{tag} ({idx})"))
+
+            valid = assay.valid.to_numpy().flatten()
+            # Overlay image, bounding boxes, and labels.
+            plot *= hv.Path([b for b, v in zip(contours, valid) if v]).opts(color="green")
+            plot *= hv.Path([b for b, v in zip(contours, valid) if not v]).opts(color="red")
+            if show_centers:
+                plot *= hv.Points((assay.x, assay.y)).opts(size=2, color="red")
+            plot *= hv.Labels(labels)
 
         # Style the plot.
         plot = plot.opts(

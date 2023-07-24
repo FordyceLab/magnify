@@ -34,7 +34,14 @@ class Pipeline:
 
         return assays
 
-    def add_pipe(self, name: str, after: str | int | None = None, before: str | int | None = None, first: bool = False, last: bool = False) -> None:
+    def add_pipe(
+        self,
+        name: str,
+        after: str | int | None = None,
+        before: str | int | None = None,
+        first: bool = False,
+        last: bool = False,
+    ) -> None:
         component_factory = registry.components.get(name)
         component = component_factory(**utils.valid_kwargs(self.config, component_factory))
 
