@@ -36,9 +36,7 @@ def ps_chip(**kwargs):
     config = defaults.merge(confection.Config(kwargs))
     pipe = Pipeline("read", config=config)
     pipe.add_pipe("identify_buttons")
-    pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
-    pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("find_buttons")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
@@ -70,7 +68,6 @@ def pc_chip(**kwargs):
 def mrbles(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
-    pipe.add_pipe("vertical_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     pipe.add_pipe("identify_mrbles")
@@ -82,7 +79,6 @@ def mrbles(**kwargs):
 def beads(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
-    pipe.add_pipe("vertical_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     pipe.add_pipe("drop")
@@ -92,7 +88,6 @@ def beads(**kwargs):
 
 def image(**kwargs):
     pipe = Pipeline("read", config=kwargs)
-    pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("drop")
     return pipe
