@@ -33,6 +33,7 @@ def imshow(
     compression_ratio=1,
     contour_type="roi",
     show_centers=False,
+    label_offset=0.3,
     **kwargs,
 ):
     if grid is None and slider is None:
@@ -64,11 +65,11 @@ def imshow(
                     contours += cont
 
                 # Get the label for the bounding box.
-                if "tag" in m:
-                    tag = m.tag.item()
+                if "tag" in m.coords:
+                    label = f"{idx}: tag"
                 else:
-                    tag = ""
-                labels.append((x, y - 0.1 * roi_len, f"{idx}: {tag}"))
+                    label = str(idx)
+                labels.append((x, y - label_offset * roi_len, label))
 
             valid = assay.valid.to_numpy().flatten()
             # Overlay image, bounding boxes, and labels.
