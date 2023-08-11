@@ -44,16 +44,15 @@ def imshow(
         if "roi" in assay:
             roi = assay.roi.compute()
             # Initialize image metadata.
-            len_x = roi.sizes["roi_x"]
-            len_y = roi.sizes["roi_y"]
+            roi_len = roi.sizes["roi_y"] // compression_ratio
             contours = []
             labels = []
             for idx, m in roi.groupby("mark"):
-                x = m.x.item()
-                y = m.y.item()
+                x = m.x.item() / compression_ratio
+                y = m.y.item() / compression_ratio
                 # Get the centers and the bounds of the bounding box.
                 top, bottom, left, right = utils.bounding_box(
-                    x, y, len_x, assay.sizes["im_x"], assay.sizes["im_y"]
+                    x, y, roi_len, img.sizes["im_x"], img.sizes["im_y"]
                 )
                 # Contours are either roi bounding boxes or contours around the foreground.
                 if contour_type == "roi":
@@ -69,12 +68,7 @@ def imshow(
                     tag = m.tag.item()
                 else:
                     tag = ""
-                if "mark_row" in m:
-                    row = m.mark_row.item()
-                    col = m.mark_col.item()
-                    labels.append((x, y - 0.1 * len_y, f"{tag} ({row}, {col})"))
-                else:
-                    labels.append((x, y - 0.1 * len_y, f"{tag} ({idx})"))
+                labels.append((x, y - 0.1 * roi_len, f"{idx}: {tag}"))
 
             valid = assay.valid.to_numpy().flatten()
             # Overlay image, bounding boxes, and labels.
