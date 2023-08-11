@@ -42,12 +42,13 @@ def imshow(
         img = assay.image[..., ::compression_ratio, ::compression_ratio].compute()
         plot = hv.Image((img.im_x, img.im_y, img))
         if "roi" in assay:
+            roi = assay.roi.compute()
             # Initialize image metadata.
-            len_x = assay.sizes["roi_x"]
-            len_y = assay.sizes["roi_y"]
+            len_x = roi.sizes["roi_x"]
+            len_y = roi.sizes["roi_y"]
             contours = []
             labels = []
-            for idx, m in assay.groupby("mark"):
+            for idx, m in roi.groupby("mark"):
                 x = m.x.item()
                 y = m.y.item()
                 # Get the centers and the bounds of the bounding box.
@@ -95,9 +96,9 @@ def imshow(
     return ds.rasterize(img, line_width=1) if rasterize else img
 
 
-def get_contours(xp):
+def get_contours(roi):
     contours, _ = cv.findContours(
-        xp.fg.to_numpy().astype("uint8"),
+        roi.fg.to_numpy().astype("uint8"),
         cv.RETR_EXTERNAL,
         cv.CHAIN_APPROX_SIMPLE,
     )
