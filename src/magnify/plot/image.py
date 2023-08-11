@@ -31,15 +31,15 @@ def imshow(
     slider=None,
     rasterize=False,
     compression_ratio=1,
-    contour_type="fg",
-    show_centers=True,
+    contour_type="roi",
+    show_centers=False,
     **kwargs,
 ):
     if grid is None and slider is None:
         slider = ["channel", "time"]
 
     def imfunc(assay: xr.Dataset, **kwargs):
-        img = assay.image[..., ::compression_ratio, ::compression_ratio]
+        img = assay.image[..., ::compression_ratio, ::compression_ratio].compute()
         plot = hv.Image((img.im_x, img.im_y, img))
         if "roi" in assay:
             # Initialize image metadata.
@@ -48,9 +48,11 @@ def imshow(
             contours = []
             labels = []
             for idx, m in assay.groupby("mark"):
+                x = m.x.item()
+                y = m.y.item()
                 # Get the centers and the bounds of the bounding box.
                 top, bottom, left, right = utils.bounding_box(
-                    m.x, m.y, len_x, assay.sizes["im_x"], assay.sizes["im_y"]
+                    x, y, len_x, assay.sizes["im_x"], assay.sizes["im_y"]
                 )
                 # Contours are either roi bounding boxes or contours around the foreground.
                 if contour_type == "roi":
@@ -69,9 +71,9 @@ def imshow(
                 if "mark_row" in m:
                     row = m.mark_row.item()
                     col = m.mark_col.item()
-                    labels.append((m.x, m.y - 0.05 * len_y, f"{tag} ({row}, {col})"))
+                    labels.append((x, y - 0.1 * len_y, f"{tag} ({row}, {col})"))
                 else:
-                    labels.append((m.x, m.y - 0.05 * len_y, f"{tag} ({idx})"))
+                    labels.append((x, y - 0.1 * len_y, f"{tag} ({idx})"))
 
             valid = assay.valid.to_numpy().flatten()
             # Overlay image, bounding boxes, and labels.
