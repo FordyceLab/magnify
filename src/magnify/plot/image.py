@@ -66,9 +66,9 @@ def imshow(
 
                 # Get the label for the bounding box.
                 if "tag" in m.coords:
-                    label = f"{idx}: tag"
+                    label = f"{m.mark.item()}: {m.tag.item()}"
                 else:
-                    label = str(idx)
+                    label = str(m.mark.item())
                 labels.append((x, y - label_offset * roi_len, label))
 
             valid = assay.valid.to_numpy().flatten()
