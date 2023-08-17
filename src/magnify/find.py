@@ -327,7 +327,7 @@ class ButtonFinder:
                 _, bright_mask = cv.threshold(
                     subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
                 )
-                dim_mask = ~cv.dilate(
+                dim_mask = 1 - cv.dilate(
                     bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
                 )
                 bright_mask = bright_mask.astype(bool)
