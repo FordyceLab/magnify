@@ -46,7 +46,7 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
 
     # Read in the dataframe of codes.
     codes_df = pd.read_csv(codes)
-    tag_names = codes_df["name"].to_list()
+    tag_names = codes_df["name"].to_numpy()
     num_codes = len(tag_names)
     # Make sure spectra and codes have consistent lanthanides.
     code_lns = set(codes_df.columns)
@@ -82,7 +82,6 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     # Step 3: Find an affine transformation of the code's lanthanide ratios to get a clustering
     # that minimizes the distance between each bead and its closest code.
     code_ratios = codes_df[lns[1:]].to_numpy()
-    code_ratios = code_ratios
 
     # We will try to find a good affine transformation by minimizing a function that approximates
     # a per-cluster distance function.
@@ -119,11 +118,12 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     p = theta[num_lns - 1 :]
 
     # Cluster points to the closest code.
-    clust = np.argmin(
+    tag_idxs = np.argmin(
         np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
     )
-    # TODO: We should make sure each cluster has a least 2 points here. Or handle empty clusters
-    # when initializing Gaussian components.
+    # Change the number of codes to be the number of clusters we found.
+    nonzero_tags = np.unique(tag_idxs)
+    num_codes = len(nonzero_tags)
 
     # Step 4: Perform a better clustering using a Gaussian mixture model initialized with the
     # clustering from step 3. We also add a uniform distribution to the mixture which allows us to
@@ -132,10 +132,10 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     covs = np.zeros((num_codes, num_lns - 1, num_lns - 1))
     proportions = np.zeros(num_codes + 1)
     # Initialize the Gaussian components.
-    for i in range(num_codes):
-        means[i] = np.median(X_r[clust == i], axis=0)
-        covs[i] = np.cov(X_r[clust == i], rowvar=False)
-        proportions[i] = np.sum(clust == i)
+    for i, tag_idx in enumerate(nonzero_tags):
+        proportions[i] = np.sum(tag_idxs == tag_idx)
+        means[i] = np.median(X_r[tag_idxs == tag_idx], axis=0)
+        covs[i] = np.cov(X_r[tag_idxs == tag_idx], rowvar=False)
     # Initialize the uniform component.
     proportions[-1] = len(X) - len(X_r)
     proportions /= proportions.sum()
@@ -150,7 +150,6 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
         probs.append(np.ones(X.shape[0]) / (upper - lower).prod())
         probs = proportions * np.array(probs).T
         probs = probs / probs.sum(axis=1)[:, np.newaxis]
-
         # M-step: Update the parameters of each component.
         means = (
             np.sum(probs[:, :-1, np.newaxis] * X[:, np.newaxis, :], axis=0)
@@ -167,10 +166,11 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
         proportions = np.sum(probs, axis=0) / X.shape[0]
 
     # Assign each bead a code based on the clustering we just found.
-    clust = np.argmax(probs, axis=1)
-    tag_names.append("outlier")
+    nonzero_tags = np.append(nonzero_tags, -1)
+    tag_names = np.append(tag_names, "outlier")
+    tag_idxs = nonzero_tags[np.argmax(probs, axis=1)]
     assay = assay.assign_coords(
-        tag=("mark", np.array(tag_names)[clust]),
+        tag=("mark", tag_names[tag_idxs]),
     )
 
     return assay
