@@ -67,13 +67,26 @@ def ndplot(
     fig = get_facet()
     if animation_frame is not None:
         fig.frames = [
-            go.Frame(name=str(idx), data=get_facet(idx).data) for idx in xp[animation_frame].values
+            go.Frame(name=str(idx), data=get_facet(idx).data[0], traces=[0])
+            for idx in xp[animation_frame].values
         ]
         fig.layout.sliders = [
             go.layout.Slider(
                 active=0,
                 steps=[
-                    {"args": [[f.name], k], "label": f.name, "method": "animate"}
+                    {
+                        "args": [
+                            [f.name],
+                            {
+                                "frame": {"duration": 0, "redraw": True},
+                                "mode": "immediate",
+                                "fromcurrent": True,
+                                "transition": {"duration": 300, "easing": "linear"},
+                            },
+                        ],
+                        "label": f.name,
+                        "method": "animate",
+                    }
                     for k, f in enumerate(fig.frames)
                 ],
             )

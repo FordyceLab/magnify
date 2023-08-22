@@ -1,4 +1,6 @@
 import cv2 as cv
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -8,21 +10,40 @@ from magnify.plot.ndplot import ndplot
 import magnify.utils as utils
 
 
-def roishow(xp: xr.Dataset, grid=None, slider=None, rasterize=False, **kwargs):
-    if grid is None and slider is None:
-        slider = ["channel", "time"]
-        grid = ["mark"]
-
+def roishow(
+    xp: xr.Dataset,
+    facet_col=None,
+    animation_frame=None,
+    binary_string=True,
+    binary_format="jpeg",
+    binary_compression_level=0,
+    cmap="viridis",
+    zmin=None,
+    zmax=None,
+    **kwargs,
+):
     def imfunc(xp: xr.Dataset, **kwargs):
+        img = xp.roi.compute()
+        if binary_string:
+            img = mpl.colors.Normalize(vmin=zmin, vmax=zmax)(img.to_numpy())
+            img = plt.get_cmap(cmap)(img)[:, :, :3]
+        print(img.shape)
+        fig = px.imshow(img, binary_string=binary_string, binary_format=binary_format)
         contours = get_contours(xp)
-        print(xp.roi.to_numpy().shape)
-        plot = hv.Image((xp.roi_x, xp.roi_y, xp.roi.to_numpy())).opts(**kwargs)
-        # plot *= hv.Path(contours).opts(color="red")
-        return plot
+        fig.add_trace(
+            go.Scatter(
+                x=np.concatenate([c[:, 0] for c in contours]),
+                y=np.concatenate([c[:, 1] for c in contours]),
+                mode="lines",
+                showlegend=False,
+                line_color="green",
+            )
+        )
+        return fig.data
 
-    plot = ndplot(xp, imfunc, grid=grid, slider=slider, **kwargs)
-    plot = plot.opts(opts.Image(tools=["hover"]))
-    return ds.rasterize(plot) if rasterize else plot
+    fig = ndplot(xp, imfunc, animation_frame=animation_frame, facet_col=facet_col, **kwargs)
+    fig.update_layout(width=800, height=800, dragmode="pan")
+    return fig
 
 
 def imshow(
@@ -31,14 +52,19 @@ def imshow(
     animation_frame=None,
     binary_string=True,
     binary_format="jpeg",
+    binary_compression_level=0,
     compression_ratio=1,
     contour_type="roi",
-    show_centers=False,
-    label_offset=0.3,
+    cmap="viridis",
+    zmin=None,
+    zmax=None,
     **kwargs,
 ):
     def imfunc(xp: xr.Dataset, **kwargs):
         img = xp.image[..., ::compression_ratio, ::compression_ratio].compute()
+        if binary_string:
+            img = mpl.colors.Normalize(vmin=zmin, vmax=zmax)(img.to_numpy())
+            img = plt.get_cmap(cmap)(img)[:, :, :3]
         fig = px.imshow(img, binary_string=binary_string, binary_format=binary_format)
         if "roi" in xp:
             roi = xp.roi.compute()
@@ -55,7 +81,7 @@ def imshow(
                 y = m.y.item() / compression_ratio
                 # Get the centers and the bounds of the bounding box.
                 top, bottom, left, right = utils.bounding_box(
-                    x, y, roi_len, img.sizes["im_x"], img.sizes["im_y"]
+                    x, y, roi_len, img.shape[1], img.shape[0]
                 )
                 # Contours are either roi bounding boxes or contours around the foreground.
                 if contour_type == "roi":
