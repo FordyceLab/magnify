@@ -3,53 +3,80 @@ import functools
 import itertools
 import math
 
-import holoviews as hv
+from plotly.subplots import make_subplots
+import panel as pn
+import plotly
+import plotly.graph_objects as go
 import xarray as xr
 
 import magnify.utils as utils
 
 
 def ndplot(
-    assay,
+    xp,
     plot_function,
-    grid: str | list[str] | None = None,
-    slider: str | list[str] | None = None,
+    facet_row: str | None = None,
+    facet_col: str | None = None,
+    facet_col_wrap: int = 0,
+    animation_frame: str | None = None,
     **kwargs,
 ):
-    grid = [dim for dim in utils.to_list(grid) if dim in assay.indexes]
-    slider = [dim for dim in utils.to_list(slider) if dim in assay.indexes]
-
-    def to_holomap(subassay):
-        if slider:
-            slider_coords = [subassay[dim].values for dim in slider]
-            return hv.HoloMap(
-                {
-                    idx: plot_function(subassay.sel(dict(zip(slider, idx))), **kwargs)
-                    for idx in itertools.product(*slider_coords)
-                },
-                kdims=slider,
-            )
+    def get_facet(idx=None):
+        if animation_frame is not None:
+            if idx is None:
+                sub_xp = xp.isel({animation_frame: 0})
+            else:
+                sub_xp = xp.sel({animation_frame: idx})
         else:
-            # We don't have sliders so just return the base plot.
-            return plot_function(subassay, **kwargs)
+            sub_xp = xp
 
-    if len(grid) > 2:
-        raise ValueError(f"Cannot plot more than 2 grid dimensions. Got {grid}.")
-    elif len(grid) == 2:
-        grid_coords0 = assay[grid[0]].values
-        grid_coords1 = assay[grid[1]].values
-        return hv.GridSpace(
-            {
-                (c0, c1): to_holomap(assay.sel({grid[0]: c0, grid[1]: c1}))
-                for c0 in grid_coords0
-                for c1 in grid_coords1
-            }
-        )
-    elif len(grid) == 1:
-        # We only have a single index so display the resulting image in a layout with
-        # an approximately equal number of rows and columns.
-        grid_coords = assay[grid[0]].values
-        num_cols = math.ceil(len(grid_coords) ** 0.5)
-        return hv.Layout([to_holomap(assay.sel({grid[0]: c})) for c in grid_coords]).cols(num_cols)
-    else:
-        return to_holomap(assay)
+        indexes = []
+        if facet_row is not None and facet_col is not None:
+            fig = make_subplots(rows=len(sub_xp[facet_row]), cols=len(sub_xp[facet_col]))
+            for i in range(len(sub_xp[facet_row])):
+                for j in range(len(sub_xp[facet_col])):
+                    traces = plot_function(sub_xp.isel({facet_row: i, facet_col: j}), **kwargs)
+                    for trace in traces:
+                        fig.add_trace(
+                            trace,
+                            row=i + 1,
+                            col=j + 1,
+                        )
+        elif facet_col is not None:
+            if facet_col_wrap == 0:
+                num_cols = len(sub_xp[facet_col])
+            else:
+                num_cols = facet_col_wrap
+            num_rows = math.ceil(len(sub_xp[facet_col]) / num_cols)
+            fig = make_subplots(rows=num_rows, cols=num_cols)
+            for i in range(len(sub_xp[facet_col])):
+                traces = plot_function(sub_xp.isel({facet_col: i}), **kwargs)
+                for trace in traces:
+                    fig.add_trace(trace, row=i // num_cols + 1, col=i % num_cols + 1)
+        elif facet_row is not None:
+            fig = make_subplots(rows=len(sub_xp[facet_row]), cols=1)
+            for i in range(len(sub_xp[facet_row])):
+                traces = plot_function(sub_xp.isel({facet_row: i}), **kwargs)
+                for trace in traces:
+                    fig.add_trace(trace, row=i + 1, col=1)
+        else:
+            fig = go.Figure(data=plot_function(sub_xp, **kwargs))
+
+        return fig
+
+    fig = get_facet()
+    if animation_frame is not None:
+        fig.frames = [
+            go.Frame(name=str(idx), data=get_facet(idx).data) for idx in xp[animation_frame].values
+        ]
+        fig.layout.sliders = [
+            go.layout.Slider(
+                active=0,
+                steps=[
+                    {"args": [[f.name], k], "label": f.name, "method": "animate"}
+                    for k, f in enumerate(fig.frames)
+                ],
+            )
+        ]
+
+    return fig

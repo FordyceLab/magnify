@@ -1,53 +1,55 @@
-from holoviews import opts
 import cv2 as cv
-import holoviews as hv
-import holoviews.operation.datashader as ds
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 import xarray as xr
 
 from magnify.plot.ndplot import ndplot
 import magnify.utils as utils
 
 
-def roishow(assay: xr.Dataset, grid=None, slider=None, rasterize=False, **kwargs):
+def roishow(xp: xr.Dataset, grid=None, slider=None, rasterize=False, **kwargs):
     if grid is None and slider is None:
         slider = ["channel", "time"]
         grid = ["mark"]
 
-    def imfunc(assay: xr.Dataset, **kwargs):
-        contours = get_contours(assay)
-        plot = hv.Image((assay.roi_x, assay.roi_y, assay.roi)).opts(**kwargs)
-        plot *= hv.Path(contours).opts(color="red")
+    def imfunc(xp: xr.Dataset, **kwargs):
+        contours = get_contours(xp)
+        print(xp.roi.to_numpy().shape)
+        plot = hv.Image((xp.roi_x, xp.roi_y, xp.roi.to_numpy())).opts(**kwargs)
+        # plot *= hv.Path(contours).opts(color="red")
         return plot
 
-    plot = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
+    plot = ndplot(xp, imfunc, grid=grid, slider=slider, **kwargs)
     plot = plot.opts(opts.Image(tools=["hover"]))
     return ds.rasterize(plot) if rasterize else plot
 
 
 def imshow(
-    assay: xr.Dataset,
-    grid=None,
-    slider=None,
-    rasterize=False,
+    xp: xr.Dataset,
+    facet_col=None,
+    animation_frame=None,
+    binary_string=True,
+    binary_format="jpeg",
     compression_ratio=1,
     contour_type="roi",
     show_centers=False,
     label_offset=0.3,
     **kwargs,
 ):
-    if grid is None and slider is None:
-        slider = ["channel", "time"]
-
-    def imfunc(assay: xr.Dataset, **kwargs):
-        img = assay.image[..., ::compression_ratio, ::compression_ratio].compute()
-        plot = hv.Image((img.im_x, img.im_y, img))
-        if "roi" in assay:
-            roi = assay.roi.compute()
+    def imfunc(xp: xr.Dataset, **kwargs):
+        img = xp.image[..., ::compression_ratio, ::compression_ratio].compute()
+        fig = px.imshow(img, binary_string=binary_string, binary_format=binary_format)
+        if "roi" in xp:
+            roi = xp.roi.compute()
             # Initialize image metadata.
             roi_len = roi.sizes["roi_y"] // compression_ratio
-            contours = []
-            labels = []
+            valid_x = []
+            valid_y = []
+            valid_labels = []
+            invalid_x = []
+            invalid_y = []
+            invalid_labels = []
             for idx, m in roi.groupby("mark"):
                 x = m.x.item() / compression_ratio
                 y = m.y.item() / compression_ratio
@@ -57,38 +59,55 @@ def imshow(
                 )
                 # Contours are either roi bounding boxes or contours around the foreground.
                 if contour_type == "roi":
-                    contours.append(hv.Bounds((left, bottom, right, top)))
+                    contour_x = [left, left, right, right, left, None]
+                    contour_y = [bottom, top, top, bottom, bottom, None]
                 elif contour_type == "fg":
                     cont = get_contours(m)
                     # Adjust contours to be in image coordinates.
-                    cont = [c + [left, top] for c in cont]
-                    contours += cont
+                    contour_x = list(np.concatenate([c[:, 0] + left for c in cont])) + [None]
+                    contour_y = list(np.concatenate([c[:, 1] + top for c in cont])) + [None]
 
                 # Get the label for the bounding box.
                 if "tag" in m.coords:
                     label = f"{m.mark.item()}: {m.tag.item()}"
                 else:
                     label = str(m.mark.item())
-                labels.append((x, y - label_offset * roi_len, label))
+                if m.valid.item():
+                    valid_x += contour_x
+                    valid_y += contour_y
+                    valid_labels += [label] * len(contour_x)
+                else:
+                    invalid_x += contour_x
+                    invalid_y += contour_y
+                    invalid_labels += [label] * len(contour_y)
 
-            valid = assay.valid.to_numpy().flatten()
-            # Overlay image, bounding boxes, and labels.
-            plot *= hv.Path([b for b, v in zip(contours, valid) if v]).opts(color="green")
-            plot *= hv.Path([b for b, v in zip(contours, valid) if not v]).opts(color="red")
-            if show_centers:
-                plot *= hv.Points((assay.x, assay.y)).opts(size=2, color="red")
-            plot *= hv.Labels(labels)
+            fig.add_trace(
+                go.Scatter(
+                    x=valid_x,
+                    y=valid_y,
+                    mode="lines",
+                    hovertemplate="%{text}<extra></extra>",
+                    text=valid_labels,
+                    showlegend=False,
+                    line_color="green",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=invalid_x,
+                    y=invalid_y,
+                    mode="lines",
+                    hovertemplate="%{text}<extra></extra>",
+                    text=invalid_labels,
+                    showlegend=False,
+                    line_color="red",
+                )
+            )
+        return fig.data
 
-        # Style the plot.
-        plot = plot.opts(
-            opts.Image(tools=["hover"]),
-            opts.Labels(text_font_size="8pt", text_color="white"),
-            opts.Path(line_width=1),
-        )
-        return plot
-
-    img = ndplot(assay, imfunc, grid=grid, slider=slider, **kwargs)
-    return ds.rasterize(img, line_width=1) if rasterize else img
+    fig = ndplot(xp, imfunc, animation_frame=animation_frame, facet_col=facet_col, **kwargs)
+    fig.update_layout(width=800, height=800, dragmode="pan")
+    return fig
 
 
 def get_contours(roi):

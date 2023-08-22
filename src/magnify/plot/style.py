@@ -1,5 +1,6 @@
 from holoviews import opts
 import holoviews as hv
+import plotly.io as pio
 
 
 styles = {
@@ -19,5 +20,6 @@ styles = {
 
 
 def set_style(name="whitegrid"):
+    pio.renderers["jupyterlab"].config["scrollZoom"] = True
     hv.extension("bokeh")
     opts.defaults(*styles[name])
