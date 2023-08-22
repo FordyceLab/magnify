@@ -11,7 +11,9 @@ import xarray as xr
 
 def to_uint8(arr: np.ndarray) -> np.ndarray:
     arr = arr.astype(float)
-    arr = 255 * arr / np.max(arr)
+    arr = arr - np.min(arr)
+    if np.max(arr) > 0:
+        arr = 255 * arr / np.max(arr)
     return arr.astype(np.uint8)
 
 

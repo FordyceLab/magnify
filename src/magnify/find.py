@@ -249,37 +249,38 @@ class ButtonFinder:
         bg = np.empty_like(fg)
         for i in range(num_rows):
             for j in range(num_cols):
-                # TODO: This step should occur over multiple channels.
-                subimage = utils.to_uint8(roi[i, j].sel(channel=self.search_channels[0]).to_numpy())
+                circles = np.empty((0, 2))
+                for channel in self.search_channels:
+                    subimage = utils.to_uint8(roi[i, j].sel(channel=channel).to_numpy())
 
-                # Find circles to refine our button estimate unless we have a blank chamber.
-                circles = None
-                if assay.tag[i, j] != "":
-                    # Filter the subimage to smooth edges and remove noise.
-                    filtered = cv.bilateralFilter(
-                        subimage,
-                        d=9,
-                        sigmaColor=75,
-                        sigmaSpace=75,
-                        borderType=cv.BORDER_DEFAULT,
-                    )
+                    # Find circles to refine our button estimate unless we have a blank chamber.
+                    if assay.tag[i, j] != "":
+                        # Filter the subimage to smooth edges and remove noise.
+                        filtered = cv.bilateralFilter(
+                            subimage,
+                            d=9,
+                            sigmaColor=75,
+                            sigmaSpace=75,
+                            borderType=cv.BORDER_DEFAULT,
+                        )
 
-                    # Find any circles in the subimage.
-                    circles = cv.HoughCircles(
-                        filtered,
-                        method=cv.HOUGH_GRADIENT,
-                        dp=1,
-                        minDist=self.roi_length / 2,
-                        param1=20,
-                        param2=5,
-                        minRadius=self.min_button_radius,
-                        maxRadius=self.max_button_radius,
-                    )
+                        # Find any circles in the subimage.
+                        c = cv.HoughCircles(
+                            filtered,
+                            method=cv.HOUGH_GRADIENT,
+                            dp=1,
+                            minDist=self.roi_length / 2,
+                            param1=20,
+                            param2=5,
+                            minRadius=self.min_button_radius,
+                            maxRadius=self.max_button_radius,
+                        )
+                        if c is not None:
+                            circles = np.concatenate([circles, c[0, :, :2]])
 
                 # Update our estimate of the button position if we found some circles.
                 left, top = offsets[i, j]
-                if circles is not None:
-                    circles = circles[0, :, :2]
+                if len(circles) > 0:
                     # Change circle coordinates from roi to image coordinates.
                     circles[:, 0] += left
                     circles[:, 1] += top
@@ -296,10 +297,6 @@ class ButtonFinder:
                         assay.sizes["im_y"],
                     )
                     roi[i, j] = images[..., top:bottom, left:right]
-                    # TODO: This step should occur over multiple channels.
-                    subimage = utils.to_uint8(
-                        roi[i, j].sel(channel=self.search_channels[0]).to_numpy()
-                    )
 
                 x_rel = round(float(assay.x[i, j, t])) - left
                 y_rel = round(float(assay.y[i, j, t])) - top
@@ -324,22 +321,34 @@ class ButtonFinder:
                 bg_mask &= ~fg_mask
 
                 # Refine the foreground & background by finding areas that are bright and dim.
-                _, bright_mask = cv.threshold(
-                    subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
-                )
-                dim_mask = 1 - cv.dilate(
-                    bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
-                )
-                bright_mask = bright_mask.astype(bool)
-                dim_mask = dim_mask.astype(bool)
+                for channel in self.search_channels:
+                    subimage = utils.to_uint8(roi[i, j].sel(channel=channel).to_numpy())
 
-                # If enough of the button is bright then set the foreground to that bright area.
-                if np.any(fg_mask & bright_mask):
-                    fg_mask &= bright_mask
+                    _, bright_mask = cv.threshold(
+                        subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
+                    )
+                    dim_mask = 1 - cv.dilate(
+                        bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
+                    )
+                    bright_mask = bright_mask.astype(bool)
+                    dim_mask = dim_mask.astype(bool)
 
-                # The background on the other hand should not be bright.
-                if np.any(bg_mask & dim_mask):
-                    bg_mask &= dim_mask
+                    # Check that the bright mask has a connected component that fits our size
+                    # requirements otherwise don't use it to refine.
+                    _, _, stats, _ = cv.connectedComponentsWithStats(
+                        utils.to_uint8(bright_mask & fg_mask), connectivity=4
+                    )
+                    stats = stats[1:]
+                    if np.any(
+                        (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
+                        & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
+                        & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
+                        & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
+                    ) and np.any(bg_mask & dim_mask):
+                        # If enough of the button is bright then refine the foreground to that area.
+                        fg_mask &= bright_mask
+                        # The background on the other hand should not be bright.
+                        bg_mask &= dim_mask
 
                 fg[i, j] = fg_mask
                 bg[i, j] = bg_mask
@@ -632,8 +641,7 @@ def exclude_beads(new_labels, labels, centers, min_bead_radius, max_bead_radius)
     pts /= np.expand_dims(areas, axis=1)
 
     # Mark valid beads.
-    old_max_label = labels.max()
-    curr_label = old_max_label + 1
+    curr_label = labels.max() + 1
     label_idxs = np.zeros(num_labels)
     new_centers = []
     for i in range(num_labels):
