@@ -5,6 +5,7 @@ import inspect
 import re
 
 import cv2 as cv
+import numba
 import numpy as np
 import xarray as xr
 
@@ -24,10 +25,12 @@ def circle(image_length: int, row: int, col: int, radius: int, value: Any = 1.0)
     return image
 
 
+@numba.jit(nopython=True)
 def ceildiv(a: int, b: int) -> int:
     return -(a // -b)
 
 
+@numba.jit(nopython=True)
 def bounding_box(
     x: int, y: int, box_length: int, image_width: int, image_height: int
 ) -> tuple[int, int, int, int]:

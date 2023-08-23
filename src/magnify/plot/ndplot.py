@@ -1,10 +1,10 @@
+from __future__ import annotations
 from typing import Callable
 import functools
 import itertools
 import math
 
 from plotly.subplots import make_subplots
-import panel as pn
 import plotly
 import plotly.graph_objects as go
 import xarray as xr
@@ -32,7 +32,12 @@ def ndplot(
 
         indexes = []
         if facet_row is not None and facet_col is not None:
-            fig = make_subplots(rows=len(sub_xp[facet_row]), cols=len(sub_xp[facet_col]))
+            fig = make_subplots(
+                rows=len(sub_xp[facet_row]),
+                cols=len(sub_xp[facet_col]),
+                column_titles=sub_xp[facet_col].values.astype(str),
+                row_titles=sub_xp[facet_row].values.astype(str),
+            )
             for i in range(len(sub_xp[facet_row])):
                 for j in range(len(sub_xp[facet_col])):
                     traces = plot_function(sub_xp.isel({facet_row: i, facet_col: j}), **kwargs)
@@ -48,13 +53,19 @@ def ndplot(
             else:
                 num_cols = facet_col_wrap
             num_rows = math.ceil(len(sub_xp[facet_col]) / num_cols)
-            fig = make_subplots(rows=num_rows, cols=num_cols)
+            fig = make_subplots(
+                rows=num_rows, cols=num_cols, subplot_titles=sub_xp[facet_col].values.astype(str)
+            )
             for i in range(len(sub_xp[facet_col])):
                 traces = plot_function(sub_xp.isel({facet_col: i}), **kwargs)
                 for trace in traces:
                     fig.add_trace(trace, row=i // num_cols + 1, col=i % num_cols + 1)
         elif facet_row is not None:
-            fig = make_subplots(rows=len(sub_xp[facet_row]), cols=1)
+            fig = make_subplots(
+                rows=len(sub_xp[facet_row]),
+                cols=1,
+                subplot_titles=sub_xp[facet_row].values.astype(str),
+            )
             for i in range(len(sub_xp[facet_row])):
                 traces = plot_function(sub_xp.isel({facet_row: i}), **kwargs)
                 for trace in traces:

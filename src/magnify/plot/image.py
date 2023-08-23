@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import cv2 as cv
 import matplotlib as mpl
 import matplotlib.pyplot as plt
