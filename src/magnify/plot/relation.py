@@ -1,4 +1,3 @@
-import holoviews as hv
 import numpy as np
 import plotly.express as px
 import scipy.stats

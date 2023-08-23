@@ -1,8 +1,8 @@
-__version__ = "0.4.12"
+__version__ = "0.4.13"
 
-__all__ = [
-    "load",
-]
+__all__ = []
+
+from magnify.file import *
 from magnify.registry import *
 import magnify.filter
 import magnify.find

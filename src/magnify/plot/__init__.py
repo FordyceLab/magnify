@@ -1,7 +1,3 @@
-import holoviews as hv
-
-hv.extension("bokeh")
-
 __all__ = [
     "imshow",
     "ndplot",
