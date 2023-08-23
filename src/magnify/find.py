@@ -39,7 +39,7 @@ class ButtonFinder:
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
-        self.search_timesteps = utils.to_list(search_timestep)
+        self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
@@ -102,23 +102,14 @@ class ButtonFinder:
             ),
         )
 
-        # Run the button finding algorithm for each timestep.
-        for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
+        # Run the button finding algorithm for each timestep specified in search_timesteps.
+        for t in tqdm.tqdm(self.search_timesteps, disable=not self.progress_bar):
             # Preload all images for this timestep so we only read from disk once.
-            images = assay.image.sel(time=time).compute()
-            # Re-use the previous button locations if the user has specified that we should only
-            # search on specific timesteps.
-            # TODO: We should actually start from the first specified timestep and propagate it back.
-            do_search = (t == 0) or (t in self.search_timesteps)
-
+            images = assay.image.isel(time=t).compute()
             # Find button centers.
-            if do_search:
-                assay.x[..., t], assay.y[..., t] = self.find_centers(
-                    images.sel(channel=self.search_channels), assay
-                )
-            else:
-                assay.x[..., t] = assay.x[..., t - 1]
-                assay.y[..., t] = assay.y[..., t - 1]
+            assay.x[..., t], assay.y[..., t] = self.find_centers(
+                images.sel(channel=self.search_channels), assay
+            )
 
             # Compute the roi, foreground and background masks for all buttons.
             (
@@ -127,7 +118,50 @@ class ButtonFinder:
                 assay.bg[:, :, :, t],
                 assay.x[..., t],
                 assay.y[..., t],
-            ) = self.find_rois(images, t, do_search, assay)
+            ) = self.find_rois(images, t, assay)
+            # Eagerly compute the roi values so the dask task graph doesn't get too large.
+            assay["roi"] = assay.roi.persist()
+            assay["fg"] = assay.fg.persist()
+            assay["bg"] = assay.bg.persist()
+
+        # Now fill in the remaining timesteps where we aren't searching.
+        for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
+            if t in self.search_timesteps:
+                # Skip this timestep since we've already processed it.
+                continue
+
+            if t < self.search_timesteps[0]:
+                # Backfill timesteps that come before the first searched timestep.
+                copy_t = self.search_timesteps[0]
+            else:
+                # Re-use the button locations of the timestep just before this one since it's either
+                # a searched timestep or a timestep we just copied locations into.
+                copy_t = t - 1
+
+            # Preload all images for this timestep so we only read from disk once and
+            # convert them all relevant data to numpy arrays since iterating through xarrays is slow.
+            images = assay.image.sel(time=time).to_numpy()
+            x = assay.x[..., copy_t].to_numpy()
+            y = assay.y[..., copy_t].to_numpy()
+            roi = np.empty_like(assay.roi[:, :, :, t])
+            # Update the roi since the location is copied but the roi images are timestep specific.
+            for i in range(num_rows):
+                for j in range(num_cols):
+                    top, bottom, left, right = utils.bounding_box(
+                        round(x[i, j]),
+                        round(y[i, j]),
+                        roi.shape[-1],
+                        assay.sizes["im_x"],
+                        assay.sizes["im_y"],
+                    )
+                    roi[i, j] = images[..., top:bottom, left:right]
+
+            assay.roi[:, :, :, t] = roi
+            assay.fg[:, :, :, t] = assay.fg[:, :, :, copy_t]
+            assay.bg[:, :, :, t] = assay.bg[:, :, :, copy_t]
+            assay.x[..., t] = x
+            assay.y[..., t] = y
+            # Eagerly compute the roi values so the dask task graph doesn't get too large.
             assay["roi"] = assay.roi.persist()
             assay["fg"] = assay.fg.persist()
             assay["bg"] = assay.bg.persist()
@@ -230,7 +264,7 @@ class ButtonFinder:
 
         return mark_x, mark_y
 
-    def find_rois(self, images: xr.DataArray, t: int, do_search: bool, assay: xr.Dataset):
+    def find_rois(self, images: xr.DataArray, t: int, assay: xr.Dataset):
         # Convert all relevant quantities to numpy arrays since xarrays are very slow
         # when iterated over.
         images = images.to_numpy()
@@ -246,9 +280,9 @@ class ButtonFinder:
         ]
         offsets = np.zeros((num_rows, num_cols, 2), dtype=int)
 
-        # Initialize the roi images.
         for i in range(num_rows):
             for j in range(num_cols):
+                # Initialize the roi image.
                 top, bottom, left, right = utils.bounding_box(
                     round(x[i, j]),
                     round(y[i, j]),
@@ -257,14 +291,7 @@ class ButtonFinder:
                     assay.sizes["im_y"],
                 )
                 roi[i, j] = images[..., top:bottom, left:right]
-                offsets[i, j] = left, top
 
-        if not do_search:
-            # If we're not searching just use the previous background/foreground masks.
-            return roi, assay.fg[:, :, :, t - 1], assay.bg[:, :, :, t - 1], x, y
-
-        for i in range(num_rows):
-            for j in range(num_cols):
                 circles = np.empty((0, 2))
                 for channel in search_channel_idxs:
                     subimage = utils.to_uint8(roi[i, j, channel])
@@ -295,7 +322,6 @@ class ButtonFinder:
                             circles = np.concatenate([circles, c[0, :, :2]])
 
                 # Update our estimate of the button position if we found some circles.
-                left, top = offsets[i, j]
                 if len(circles) > 0:
                     # Change circle coordinates from roi to image coordinates.
                     circles[:, 0] += left
