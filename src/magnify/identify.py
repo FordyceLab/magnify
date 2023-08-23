@@ -58,8 +58,8 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     # where S are the reference spectra and I are the intensities of each bead.
     channels = [c for c in assay.channel.values if c in spectra_df.columns]
     sp = spectra_df[channels].to_numpy()
-    sel = assay.sel(time="0s", channel=channels)
-    intensities = sel.roi.where(sel.fg).mean(dim=["roi_x", "roi_y"]).to_numpy()
+    sel = assay.roi.isel(time=0).sel(channel=channels)
+    intensities = sel.where(sel.fg).mean(dim=["roi_x", "roi_y"]).to_numpy()
     volumes = np.linalg.lstsq(sp.T, intensities.T, rcond=None)[0].T
     # We also want the lanthanide ratios with respect to the reference lanthanide.
     ratios = volumes / volumes[:, 0:1]
@@ -70,14 +70,16 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
 
     # Step 2: Agressively remove outliers to make future processing easier.
     X = ratios[:, 1:]
-    dist = np.linalg.norm(X[:, np.newaxis, :] - X[np.newaxis, :, :], axis=-1)
-    np.fill_diagonal(dist, np.inf)
-    dist = np.sort(dist, axis=1)
     # Find the distance to a point that should still be in the same cluster assuming cluster
     # sizes differ by a factor of at most 20 from the mean cluster size.
-    clust_dist = dist[:, round(len(X) / (20 * num_codes))]
+    n_neighbor = round(len(X) / (20 * num_codes)) + 2
+    dist = (
+        scipy.spatial.KDTree(X, leafsize=n_neighbor)
+        .query(X, k=[n_neighbor], workers=-1)[0]
+        .flatten()
+    )
     # We care more about excluding all outliers so exclude 5% of points.
-    X_r = X[clust_dist <= np.percentile(clust_dist, 95)]
+    X_r = X[dist <= np.percentile(dist, 95)]
 
     # Step 3: Find an affine transformation of the code's lanthanide ratios to get a clustering
     # that minimizes the distance between each bead and its closest code.
@@ -139,17 +141,22 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     # Initialize the uniform component.
     proportions[-1] = len(X) - len(X_r)
     proportions /= proportions.sum()
-    lower = np.min(X, axis=0)
-    upper = np.max(X, axis=0)
+    log_cond_probs = np.empty((len(X), num_codes + 1))
+    log_cond_probs[:, -1] = -np.log(X.max(axis=0) - X.min(axis=0)).sum()
+
     # Run the Expectation-Maximization algorithm.
-    for i in range(300):
+    for i in range(30):
         # E-step: Compute the probability of each point belonging to each component.
-        probs = []
-        for k in range(num_codes):
-            probs.append(scipy.stats.multivariate_normal.pdf(X, means[k], covs[k]))
-        probs.append(np.ones(X.shape[0]) / (upper - lower).prod())
-        probs = proportions * np.array(probs).T
-        probs = probs / probs.sum(axis=1)[:, np.newaxis]
+        diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
+        # Work in log space most of the time to avoid numerical issues.
+        log_cond_probs[:, :-1] = (
+            -X.shape[1] * np.log(2 * np.pi) / 2
+            - 0.5 * np.log(np.linalg.det(covs))
+            - 0.5 * np.einsum("...i,...ij,...j->...", diff, np.linalg.inv(covs), diff)
+        )
+        log_probs = np.log(proportions) + log_cond_probs
+        log_probs -= scipy.special.logsumexp(log_probs, axis=1)[:, np.newaxis]
+        probs = np.exp(log_probs)
         # M-step: Update the parameters of each component.
         means = (
             np.sum(probs[:, :-1, np.newaxis] * X[:, np.newaxis, :], axis=0)
@@ -163,6 +170,8 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
             )
             / np.sum(probs[:, :-1], axis=0)[:, np.newaxis, np.newaxis]
         )
+        # Regularize the covariance matrix to avoid numerical issues.
+        covs += np.eye(X.shape[1]) * 1e-6
         proportions = np.sum(probs, axis=0) / X.shape[0]
 
     # Assign each bead a code based on the clustering we just found.
