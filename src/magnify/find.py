@@ -184,8 +184,8 @@ class ButtonFinder:
         y = points[:, 1]
 
         # Step 3: Cluster the points into distinct rows and columns.
-        points_per_row = (assay.tag != "").sum(dim="mark_col")
-        points_per_col = (assay.tag != "").sum(dim="mark_row")
+        points_per_row = (assay.tag != "").sum(dim="mark_col").to_numpy()
+        points_per_col = (assay.tag != "").sum(dim="mark_row").to_numpy()
         num_rows, num_cols = assay.sizes["mark_row"], assay.sizes["mark_col"]
         row_labels = cluster_1d(
             y,
@@ -561,7 +561,9 @@ def cluster_1d(
     permutation = np.argsort(points)
     points = points[permutation]
 
-    def cost(offset: int) -> tuple[float, np.ndarray]:
+    min_cost = np.inf
+    best_spans = None
+    for offset in range(total_length - round(num_clusters * cluster_length)):
         # Compute the boundaries and center of each cluster.
         boundaries = np.arange(num_clusters + 1) * cluster_length + offset
         centers = (boundaries[1:] + boundaries[:-1]) / 2
@@ -580,16 +582,15 @@ def cluster_1d(
         cost *= np.sqrt(ideal_num_points)
         # Penalize clusters for having too few or too many points.
         cost = cost + penalty * (ideal_num_points - num_points) ** 2
-        return np.sum(cost), spans
-
-    spans = min(
-        (cost(i) for i in range(total_length - round(num_clusters * cluster_length))),
-        key=lambda x: x[0],
-    )[1]
+        if cost.sum() < min_cost:
+            min_cost = cost.sum()
+            best_spans = spans
 
     # Label each point with its cluster, label points outside clusters as -1.
     labels = -np.ones_like(points, dtype=int)
-    labels[spans[0] : spans[-1]] = np.repeat(np.arange(num_clusters), spans[1:] - spans[:-1])
+    labels[best_spans[0] : best_spans[-1]] = np.repeat(
+        np.arange(num_clusters), best_spans[1:] - best_spans[:-1]
+    )
 
     # Return the labels based on the original order of the points.
     return labels[np.argsort(permutation)]
