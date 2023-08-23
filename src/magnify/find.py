@@ -120,9 +120,16 @@ class ButtonFinder:
                 assay.y[..., t] = assay.y[..., t - 1]
 
             # Compute the roi, foreground and background masks for all buttons.
-            assay.roi[:, :, :, t], assay.fg[:, :, :, t], assay.bg[:, :, :, t] = self.find_rois(
-                images, t, do_search, assay
-            )
+            (
+                assay.roi[:, :, :, t],
+                assay.fg[:, :, :, t],
+                assay.bg[:, :, :, t],
+                assay.x[..., t],
+                assay.y[..., t],
+            ) = self.find_rois(images, t, do_search, assay)
+            assay["roi"] = assay.roi.persist()
+            assay["fg"] = assay.fg.persist()
+            assay["bg"] = assay.bg.persist()
         assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose("mark", ...)
 
         return assay
@@ -223,18 +230,28 @@ class ButtonFinder:
         return mark_x, mark_y
 
     def find_rois(self, images: xr.DataArray, t: int, do_search: bool, assay: xr.Dataset):
-        roi = xr.DataArray(
-            data=np.zeros_like(assay.roi[:, :, :, t]), coords=assay.roi[:, :, :, t].coords
-        )
+        # Convert all relevant quantities to numpy arrays since xarrays are very slow
+        # when iterated over.
+        images = images.to_numpy()
         num_rows, num_cols = assay.roi.shape[:2]
-        offsets = np.empty((num_rows, num_cols, 2), dtype=int)
+        tag = assay.tag.to_numpy()
+        x = assay.x[:, :, t].to_numpy()
+        y = assay.y[:, :, t].to_numpy()
+        roi = np.empty_like(assay.roi.isel(time=t))
+        fg = np.empty_like(roi, dtype=bool)
+        bg = np.empty_like(fg)
+        search_channel_idxs = [
+            list(assay.channel.to_numpy()).index(c) for c in self.search_channels
+        ]
+        offsets = np.zeros((num_rows, num_cols, 2), dtype=int)
+
         # Initialize the roi images.
         for i in range(num_rows):
             for j in range(num_cols):
                 top, bottom, left, right = utils.bounding_box(
-                    round(float(assay.x[i, j, t])),
-                    round(float(assay.y[i, j, t])),
-                    self.roi_length,
+                    round(x[i, j]),
+                    round(y[i, j]),
+                    roi.shape[-1],
                     assay.sizes["im_x"],
                     assay.sizes["im_y"],
                 )
@@ -243,18 +260,16 @@ class ButtonFinder:
 
         if not do_search:
             # If we're not searching just use the previous background/foreground masks.
-            return roi, assay.fg[:, :, :, t - 1].compute(), assay.bg[:, :, :, t - 1].compute()
+            return roi, assay.fg[:, :, :, t - 1], assay.bg[:, :, :, t - 1]
 
-        fg = np.empty_like(roi, dtype=bool)
-        bg = np.empty_like(fg)
         for i in range(num_rows):
             for j in range(num_cols):
                 circles = np.empty((0, 2))
-                for channel in self.search_channels:
-                    subimage = utils.to_uint8(roi[i, j].sel(channel=channel).to_numpy())
+                for channel in search_channel_idxs:
+                    subimage = utils.to_uint8(roi[i, j, channel])
 
                     # Find circles to refine our button estimate unless we have a blank chamber.
-                    if assay.tag[i, j] != "":
+                    if tag[i, j] != "":
                         # Filter the subimage to smooth edges and remove noise.
                         filtered = cv.bilateralFilter(
                             subimage,
@@ -284,22 +299,22 @@ class ButtonFinder:
                     # Change circle coordinates from roi to image coordinates.
                     circles[:, 0] += left
                     circles[:, 1] += top
-                    point = np.array([assay.x[i, j, t], assay.y[i, j, t]])
+                    point = np.array([x[i, j], y[i, j]])
                     # Use the circle center closest to our previous estimate of the button.
                     closest_idx = np.argmin(np.linalg.norm(circles - point, axis=1))
-                    assay.x[i, j, t], assay.y[i, j, t] = circles[closest_idx]
+                    x[i, j], y[i, j] = circles[closest_idx]
                     # Move the roi bounding box to the center the new x, y values.
                     top, bottom, left, right = utils.bounding_box(
-                        round(float(assay.x[i, j, t])),
-                        round(float(assay.y[i, j, t])),
+                        round(x[i, j]),
+                        round(y[i, j]),
                         self.roi_length,
                         assay.sizes["im_x"],
                         assay.sizes["im_y"],
                     )
                     roi[i, j] = images[..., top:bottom, left:right]
 
-                x_rel = round(float(assay.x[i, j, t])) - left
-                y_rel = round(float(assay.y[i, j, t])) - top
+                x_rel = round(x[i, j]) - left
+                y_rel = round(y[i, j]) - top
 
                 # Set the foreground (the button) to be a circle of fixed radius.
                 fg_mask = utils.circle(
@@ -321,9 +336,8 @@ class ButtonFinder:
                 bg_mask &= ~fg_mask
 
                 # Refine the foreground & background by finding areas that are bright and dim.
-                for channel in self.search_channels:
-                    subimage = utils.to_uint8(roi[i, j].sel(channel=channel).to_numpy())
-
+                for channel in search_channel_idxs:
+                    subimage = utils.to_uint8(roi[i, j, channel])
                     _, bright_mask = cv.threshold(
                         subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
                     )
@@ -353,7 +367,7 @@ class ButtonFinder:
                 fg[i, j] = fg_mask
                 bg[i, j] = bg_mask
 
-        return roi, fg, bg
+        return roi, fg, bg, x, y
 
     @registry.components.register("find_buttons")
     def make(
