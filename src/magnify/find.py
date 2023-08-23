@@ -48,14 +48,14 @@ class ButtonFinder:
 
         num_rows, num_cols = assay.tag.shape
 
-        # Store all channels and timesteps for each marker in one chunk and set marker row/col
-        # sizes so each chunk ends up being at least 10MB.
-        chunk_bytes = 1e7
-        # Don't take into account dtype size since fg/bg bool arrays should also be 10MB.
-        mark_bytes = assay.dims["channel"] * assay.dims["time"] * self.roi_length**2
+        # Store each channel and timesteps for each marker in one chunk and set marker row/col
+        # sizes so each chunk ends up being at least 50MB. We will rechunk later.
+        chunk_bytes = 5e7
+        # Don't take into account dtype size since fg/bg bool arrays should also be 50MB.
+        roi_bytes = self.roi_length**2
         # Prioritize larger row chunks since we're more likely to want whole columns than rows.
-        row_chunk_size = min(math.ceil(chunk_bytes / mark_bytes), num_rows)
-        col_chunk_size = math.ceil(chunk_bytes / (mark_bytes * row_chunk_size))
+        row_chunk_size = min(math.ceil(chunk_bytes / roi_bytes), num_rows)
+        col_chunk_size = math.ceil(chunk_bytes / (roi_bytes * row_chunk_size))
         # Create the array of subimage regions.
         roi = da.empty(
             (
@@ -70,8 +70,8 @@ class ButtonFinder:
             chunks=(
                 row_chunk_size,
                 col_chunk_size,
-                assay.dims["channel"],
-                assay.dims["time"],
+                1,
+                1,
                 self.roi_length,
                 self.roi_length,
             ),
@@ -166,6 +166,22 @@ class ButtonFinder:
             assay["fg"] = assay.fg.persist()
             assay["bg"] = assay.bg.persist()
         assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose("mark", ...)
+        # Rechunk the array to chunk along markers since users will usually want to slice along that dimension.
+        mark_chunk_size = min(
+            math.ceil(chunk_bytes / (roi_bytes * assay.dims["time"] * assay.dims["channel"])),
+            num_rows,
+        )
+        chunk_sizes = [
+            mark_chunk_size,
+            assay.dims["channel"],
+            assay.dims["time"],
+            assay.dims["roi_y"],
+            assay.dims["roi_x"],
+        ]
+        # Eagerly compute the rechunking to prevent delays.
+        assay["roi"] = assay.roi.chunk(chunk_sizes).persist()
+        assay["fg"] = assay.fg.chunk(chunk_sizes).persist()
+        assay["bg"] = assay.bg.chunk(chunk_sizes).persist()
 
         return assay
 
