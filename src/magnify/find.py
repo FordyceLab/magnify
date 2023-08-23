@@ -108,6 +108,7 @@ class ButtonFinder:
             images = assay.image.sel(time=time).compute()
             # Re-use the previous button locations if the user has specified that we should only
             # search on specific timesteps.
+            # TODO: We should actually start from the first specified timestep and propagate it back.
             do_search = (t == 0) or (t in self.search_timesteps)
 
             # Find button centers.
@@ -260,7 +261,7 @@ class ButtonFinder:
 
         if not do_search:
             # If we're not searching just use the previous background/foreground masks.
-            return roi, assay.fg[:, :, :, t - 1], assay.bg[:, :, :, t - 1]
+            return roi, assay.fg[:, :, :, t - 1], assay.bg[:, :, :, t - 1], x, y
 
         for i in range(num_rows):
             for j in range(num_cols):
