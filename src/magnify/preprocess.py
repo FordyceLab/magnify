@@ -18,7 +18,12 @@ def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
         with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
             darkfield = tif.asarray()
 
-    assay["tile"] = (assay.tile - darkfield) / flatfield
+    dtype = assay.tile.dtype
+    tiles = (assay.tile.astype(float) - darkfield).clip(min=0)
+    max_val = tiles.max()
+    tiles = tiles / flatfield
+    tiles = tiles * max_val / tiles.max()
+    assay["tile"] = tiles.astype(assay.tile.dtype)
     return assay
 
 

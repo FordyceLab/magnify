@@ -507,68 +507,63 @@ class BeadFinder:
                 nnz = l != 0
                 labels[nnz] = l[nnz] + labels.max()
 
-        # Update the assay object with the beads we found.
         num_beads = len(centers)
+        # Store each channel and timesteps for each marker in one chunk and set marker row/col
+        # sizes so each chunk ends up being at least 50MB. We will rechunk later.
+        chunk_bytes = 5e7
+        # Don't take into account dtype size since fg/bg bool arrays should also be 50MB.
+        roi_bytes = self.roi_length**2
         # Create the array of subimage regions.
-        assay["roi"] = (
-            ("mark", "channel", "time", "roi_y", "roi_x"),
-            np.empty(
-                (
+        roi = da.empty(
+            (
+                num_beads,
+                assay.dims["channel"],
+                assay.dims["time"],
+                self.roi_length,
+                self.roi_length,
+            ),
+            dtype=assay.image.dtype,
+            chunks=(
+                min(
+                    math.ceil(
+                        chunk_bytes / (roi_bytes * assay.dims["channel"] * assay.dims["time"])
+                    ),
                     num_beads,
-                    assay.dims["channel"],
-                    assay.dims["time"],
-                    self.roi_length,
-                    self.roi_length,
                 ),
-                dtype=assay.image.dtype,
+                assay.dims["channel"],
+                assay.dims["time"],
+                self.roi_length,
+                self.roi_length,
             ),
         )
+
+        assay["roi"] = (("mark", "channel", "time", "roi_y", "roi_x"), roi)
         assay = assay.assign_coords(
             fg=(
                 ("mark", "channel", "time", "roi_y", "roi_x"),
-                np.empty(
-                    (
-                        num_beads,
-                        assay.dims["channel"],
-                        assay.dims["time"],
-                        self.roi_length,
-                        self.roi_length,
-                    ),
-                    dtype=bool,
-                ),
+                da.empty_like(roi, dtype=bool),
             ),
             bg=(
                 ("mark", "channel", "time", "roi_y", "roi_x"),
-                np.empty(
-                    (
-                        num_beads,
-                        assay.dims["channel"],
-                        assay.dims["time"],
-                        self.roi_length,
-                        self.roi_length,
-                    ),
-                    dtype=bool,
-                ),
+                da.empty_like(roi, dtype=bool),
             ),
             x=(
-                ["mark", "time"],
+                ("mark", "time"),
                 np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
             ),
             y=(
-                ["mark", "time"],
+                ("mark", "time"),
                 np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
             ),
         )
 
-        rois = np.empty(assay.roi.shape, dtype=assay.roi.dtype)
-        fgs = np.empty(assay.roi.shape, dtype=bool)
-        bgs = np.empty(assay.roi.shape, dtype=bool)
-        image = assay.image.to_numpy()
         # Compute the foreground and background masks for all buttons.
         # TODO: Don't assume beads don't move across timesteps.
         # Iterate over numpy arrays since indexing over xarrays is slow.
         x = assay.x.sel(time="0s").to_numpy()
         y = assay.y.sel(time="0s").to_numpy()
+        fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
+        bg = np.empty_like(fg)
         for i in range(num_beads):
             # Set the subimage region for this bead.
             top, bottom, left, right = utils.bounding_box(
@@ -578,17 +573,31 @@ class BeadFinder:
                 assay.sizes["im_x"],
                 assay.sizes["im_y"],
             )
-            rois[i] = image[..., top:bottom, left:right]
-
             # Set the foreground of the bead.
-            fgs[i] = labels[top:bottom, left:right] == i + 1
-
+            fg[i] = labels[top:bottom, left:right] == i + 1
             # Set the background to be the region assigned to no beads.
-            bgs[i] = labels[top:bottom, left:right] == 0
+            bg[i] = labels[top:bottom, left:right] == 0
+        assay.fg[:] = fg[:, np.newaxis]
+        assay.bg[:] = bg[:, np.newaxis]
 
-        assay.fg[:] = fgs
-        assay.bg[:] = bgs
-        assay.roi[:] = rois
+        for i, channel in enumerate(assay.channel):
+            image = assay.image.sel(channel=channel).to_numpy()
+            roi = np.empty((num_beads,) + assay.roi.shape[2:], dtype=assay.roi.dtype)
+            for j in range(num_beads):
+                # Set the subimage region for this bead.
+                top, bottom, left, right = utils.bounding_box(
+                    round(x[j]),
+                    round(y[j]),
+                    self.roi_length,
+                    assay.sizes["im_x"],
+                    assay.sizes["im_y"],
+                )
+                roi[j] = image[..., top:bottom, left:right]
+            assay.roi[:, i] = roi
+
+        assay["roi"] = assay.roi.persist()
+        assay["fg"] = assay.fg.persist()
+        assay["bg"] = assay.bg.persist()
         assay = assay.assign_coords(
             valid=(
                 ("mark", "time"),
