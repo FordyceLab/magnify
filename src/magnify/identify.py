@@ -4,7 +4,6 @@ import re
 import numpy as np
 import pandas as pd
 import scipy
-import sklearn.mixture
 
 import magnify.registry as registry
 
