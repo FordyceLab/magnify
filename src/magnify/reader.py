@@ -195,11 +195,8 @@ class Reader:
                 if channel_coords is not None:
                     coords["channel"] = channel_coords
                 if time_coords is not None:
-                    coords["time"] = time_coords
-
-                # if "time" in coords:
-                #     coords["time"] = pd.to_datetime(coords["time"])
-                #     coords["time"] -= coords["time"][0]
+                    # Store time as seconds.
+                    coords["time"] = [int(t.timestamp()) for t in time_coords]
 
                 # Put all our data into an xarray dataset.
                 assay = xr.Dataset(
@@ -226,7 +223,7 @@ class Reader:
                 for (meta_name, dim), meta_idxs_dict in meta_dict.items():
                     if dim == "time":
                         # Make sure we're indexing using datetimes.
-                        dim_idxs = assay[dim] = pd.to_datetime(assay[dim])
+                        dim_idxs = [datetime.datetime.fromtimestamp(idx) for idx in assay[dim].values]
                     else:
                         dim_idxs = assay[dim].values
 
@@ -270,9 +267,8 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
         glob_path = re.sub(rf"\({key}.*?\)", "*", glob_path)
         glob_path = re.sub(rf"\([^\(]*?_{key}.*?\)", "*", glob_path)
         # For regexes replace all named search patterns with named wildcard groups.
-        regex_path = re.sub(rf"\\\({key}.*?\\\)", rf"(?P<{key}>.*?)", regex_path)
-        regex_path = re.sub(rf"\\\(([^\(]*?)_{key}.*?\\\)", r"(?P<\1>.*?)", regex_path)
-
+        regex_path = re.sub(rf"\\\({key}.*?\\\)", rf"(?P<{key}>[^/\\\]*?)", regex_path)
+        regex_path = re.sub(rf"\\\(([^\(]*?)_{key}.*?\\\)", r"(?P<\1>[^/\\\]*?)", regex_path)
         # Get any associated formatting information in the named search pattern.
         key_search = re.search(rf"\({key}(?:\s*\|\s*(.*?))?\)", pattern)
         if key_search:
