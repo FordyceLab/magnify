@@ -560,8 +560,8 @@ class BeadFinder:
         # Compute the foreground and background masks for all buttons.
         # TODO: Don't assume beads don't move across timesteps.
         # Iterate over numpy arrays since indexing over xarrays is slow.
-        x = assay.x.sel(time="0s").to_numpy()
-        y = assay.y.sel(time="0s").to_numpy()
+        x = assay.x.sel(time=0).to_numpy()
+        y = assay.y.sel(time=0).to_numpy()
         fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
         bg = np.empty_like(fg)
         for i in range(num_beads):
