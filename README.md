@@ -9,13 +9,13 @@ pip install magnify
 ```
 
 ## Usage
-Here's a minimal example of how to use magnify to find, analyze, and visualize beads given a microscopy image.
+Here's a minimal example of how to use magnify to find, analyze, and visualize lanthanide-encoded beads given a microscopy image.
 ```python
 import magnify as mg
 import magnify.plot as mp
 
 # Process the experiment and get the output as an xarray dataset.
-pipe = mg.beads(search_channel="egfp")
+pipe = mg.beads(search_channel="620", min_bead_radius=10)
 xp = pipe("example.ome.tif")
 
 # Get the mean bead area and intensity.
@@ -25,7 +25,7 @@ print("Mean Bead Intensity:", xp.where(xp.fg).roi.mean())
 # Show all the beads and how they were segmented.
 mp.imshow(xp)
 ```
-TODO: Include output image here.
+![](static/imshow.gif)
 
 ## Core Concepts
 ### Output Format
