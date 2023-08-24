@@ -29,7 +29,6 @@ def roishow(
         if binary_string:
             img = mpl.colors.Normalize(vmin=zmin, vmax=zmax)(img.to_numpy())
             img = plt.get_cmap(cmap)(img)[:, :, :3]
-        print(img.shape)
         fig = px.imshow(img, binary_string=binary_string, binary_format=binary_format)
         contours = get_contours(xp)
         fig.add_trace(

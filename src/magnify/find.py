@@ -9,7 +9,6 @@ import dask.array as da
 import numba
 import numpy as np
 import scipy
-import skimage
 import tqdm
 import xarray as xr
 
@@ -459,7 +458,7 @@ class BeadFinder:
             for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
                 # Find a mask of all bright spots.
-                mask = cv.adaptiveThreshold(
+                thresh = cv.adaptiveThreshold(
                     image,
                     maxValue=255,
                     adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -468,25 +467,45 @@ class BeadFinder:
                     C=-5,
                 )
                 # Find points far away from any dim spots.
-                dist = scipy.ndimage.distance_transform_edt(mask)
-                local_max = skimage.feature.peak_local_max(
-                    dist,
-                    min_distance=self.min_bead_radius,
-                    threshold_rel=self.min_bead_radius / self.max_bead_radius,
-                    labels=mask,
-                    footprint=np.ones((3, 3)),
-                )
-                max_mask = np.zeros(dist.shape, dtype=bool)
-                max_mask[tuple(local_max.T)] = True
+                dist = cv.distanceTransform(thresh, cv.DIST_L2, cv.DIST_MASK_PRECISE)
+                max_len = 2 * self.min_bead_radius + 1
+                # Get local maxima using a dilation filter.
+                local_max = cv.dilate(dist, kernel=np.ones((max_len, max_len)))
+                max_mask = (dist == local_max).astype(np.int32)
+                # Remove local maxima that are a small distance from the background.
+                max_mask[local_max < self.min_bead_radius] = 0
+                # Only keep a single local maximum per nearby maxima.
+                max_idxs = np.column_stack(np.where(max_mask))
+                duplicates = scipy.spatial.KDTree(max_idxs).query_pairs(
+                    self.min_bead_radius, output_type="ndarray"
+                )[:, 1]
+                max_mask[tuple(max_idxs[duplicates].T)] = 0
+                # Set the label of each local maximum.
+                max_idxs = np.delete(max_idxs, duplicates, axis=0)
+                max_mask[tuple(max_idxs.T)] = np.arange(1, len(max_idxs) + 1)
 
                 # Use watershed to separate touching beads.
-                markers = scipy.ndimage.label(max_mask)[0]
-                l = skimage.segmentation.watershed(-dist, markers, mask=mask)
-
-                # Exclude beads that we've already seen or that don't fit size criteria.
-                c = exclude_beads(l, labels, centers, self.min_bead_radius, self.max_bead_radius)
-                if len(c) > 0:
-                    centers = np.concatenate([centers, c])
+                l = cv.watershed(cv.cvtColor(image, cv.COLOR_GRAY2BGR), max_mask)
+                l[l == -1] = 0
+                # Make labels contiguous in case watershed removed some.
+                l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
+                c = get_label_centers(l)
+                if len(centers) > 0:
+                    # Exclude beads that we've already seen.
+                    duplicates = np.array(
+                        [
+                            len(neighbors) > 0
+                            for neighbors in scipy.spatial.KDTree(centers).query_ball_point(
+                                c, 2 * self.min_bead_radius
+                            )
+                        ]
+                    )
+                    c = c[~duplicates]
+                    l[np.isin(l, np.where(duplicates)[0] + 1)] = 0
+                    l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
+                centers = np.concatenate([centers, c])
+                nnz = l != 0
+                labels[nnz] = l[nnz] + labels.max()
 
         # Update the assay object with the beads we found.
         num_beads = len(centers)
@@ -546,11 +565,15 @@ class BeadFinder:
         bgs = np.empty(assay.roi.shape, dtype=bool)
         image = assay.image.to_numpy()
         # Compute the foreground and background masks for all buttons.
+        # TODO: Don't assume beads don't move across timesteps.
+        # Iterate over numpy arrays since indexing over xarrays is slow.
+        x = assay.x.sel(time="0s").to_numpy()
+        y = assay.y.sel(time="0s").to_numpy()
         for i in range(num_beads):
             # Set the subimage region for this bead.
             top, bottom, left, right = utils.bounding_box(
-                round(float(assay.x[i, 0])),
-                round(float(assay.y[i, 0])),
+                round(x[i]),
+                round(y[i]),
                 self.roi_length,
                 assay.sizes["im_x"],
                 assay.sizes["im_y"],
@@ -560,9 +583,8 @@ class BeadFinder:
             # Set the foreground of the bead.
             fgs[i] = labels[top:bottom, left:right] == i + 1
 
-            # Set the background to be everything else in the region,
-            # which could include other beads.
-            bgs[i] = ~fgs[i]
+            # Set the background to be the region assigned to no beads.
+            bgs[i] = labels[top:bottom, left:right] == 0
 
         assay.fg[:] = fgs
         assay.bg[:] = bgs
@@ -685,44 +707,15 @@ def regress_clusters(
 
 
 @numba.jit(nopython=True)
-def exclude_beads(new_labels, labels, centers, min_bead_radius, max_bead_radius):
-    # Compute the area of each bead and their centers.
-    num_labels = new_labels.max()
-    pts = np.zeros((num_labels, 2))
-    areas = np.zeros(num_labels)
-    for i in range(new_labels.shape[0]):
-        for j in range(new_labels.shape[1]):
-            k = new_labels[i, j]
-            areas[k - 1] += 1
-            pts[k - 1, 0] += j
-            pts[k - 1, 1] += i
-    pts /= np.expand_dims(areas, axis=1)
-
-    # Mark valid beads.
-    curr_label = labels.max() + 1
-    label_idxs = np.zeros(num_labels)
-    new_centers = []
-    for i in range(num_labels):
-        if (areas[i] < np.pi * min_bead_radius**2) or (areas[i] > np.pi * max_bead_radius**2):
-            # Ignore incorrectly sized beads
-            continue
-        elif (
-            len(centers) > 0
-            and np.min(np.sqrt(np.sum((pts[i] - centers) ** 2, axis=1))) < 2 * min_bead_radius
-        ):
-            # Ignore beads we've already seen.
-            continue
-        else:
-            new_centers.append(pts[i])
-            label_idxs[i] = curr_label
-            curr_label += 1
-
-    # Update the global labels array.
-    for i in range(new_labels.shape[0]):
-        for j in range(new_labels.shape[1]):
-            k = new_labels[i, j]
-            if k != 0 and label_idxs[k - 1] != 0:
-                l = label_idxs[k - 1]
-                labels[i, j] = l
-
-    return new_centers
+def get_label_centers(labels):
+    num_labels = labels.max() + 1
+    centers = np.zeros((num_labels, 2))
+    num_points = np.zeros(num_labels)
+    for i in range(labels.shape[0]):
+        for j in range(labels.shape[1]):
+            k = labels[i, j]
+            centers[k, 0] += j
+            centers[k, 1] += i
+            num_points[k] += 1
+    centers /= np.expand_dims(num_points, axis=1)
+    return centers[1:]
