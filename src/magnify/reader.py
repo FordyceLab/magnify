@@ -268,10 +268,10 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
     for key, formatter in list(keys.items()):
         # For globs replace all named search patterns e.g.: (time|%S) with the wildcard *.
         glob_path = re.sub(rf"\({key}.*?\)", "*", glob_path)
-        glob_path = re.sub(rf"\(.*?_{key}.*?\)", "*", glob_path)
+        glob_path = re.sub(rf"\([^\(]*?_{key}.*?\)", "*", glob_path)
         # For regexes replace all named search patterns with named wildcard groups.
         regex_path = re.sub(rf"\\\({key}.*?\\\)", rf"(?P<{key}>.*?)", regex_path)
-        regex_path = re.sub(rf"\\\((.*?)_{key}.*?\\\)", r"(?P<\1>.*?)", regex_path)
+        regex_path = re.sub(rf"\\\(([^\(]*?)_{key}.*?\\\)", r"(?P<\1>.*?)", regex_path)
 
         # Get any associated formatting information in the named search pattern.
         key_search = re.search(rf"\({key}(?:\s*\|\s*(.*?))?\)", pattern)
@@ -285,7 +285,7 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
 
         # Get meta information that provides alternate value mappings for a given key
         # along with any formatting information e.g. (concentration_time|float).
-        meta_search = re.findall(rf"\((.*?)_{key}(?:\s*\|\s*(.*?))?(?:\s*\|\s*(.*?))?\)", pattern)
+        meta_search = re.findall(rf"\(([^\(]*?)_{key}(?:\s*\|\s*(.*?))?(?:\s*\|\s*(.*?))?\)", pattern)
         for name, formatter_str, format_str in meta_search:
             meta_formatter = default_formatters[formatter_str]
             # Once again we need to set default arguments because of closure rules in Python.
