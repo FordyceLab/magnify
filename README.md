@@ -42,8 +42,15 @@ Also important for large datasets is how the data is stored. The `fg`, `bg`, `ro
 
 ### File Parsing
 Since a single experiment can consist of many files spread out across many folders, magnify allows you to retrieve many files using a single string. For example, let's say you've acquired an image across multiple channels stored in the following folder structure:
-
-TODO: image of folder structure
+```text
+.
+├── egfp/
+│   └── image1.tif
+├── cy5/
+│   └── image2.tif
+└── dapi/
+    └── image3.tif
+```
 
 You can load all these images into magnify with
 ```python
