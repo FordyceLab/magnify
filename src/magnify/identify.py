@@ -122,8 +122,10 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     tag_idxs = np.argmin(
         np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
     )
+
     # Change the number of codes to be the number of clusters we found.
-    nonzero_tags = np.unique(tag_idxs)
+    nonzero_tags, counts = np.unique(tag_idxs, return_counts=True)
+    nonzero_tags = nonzero_tags[counts >= 5]
     num_codes = len(nonzero_tags)
 
     # Step 4: Perform a better clustering using a Gaussian mixture model initialized with the
@@ -142,17 +144,22 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     proportions /= proportions.sum()
     log_cond_probs = np.empty((len(X), num_codes + 1))
     log_cond_probs[:, -1] = -np.log(X.max(axis=0) - X.min(axis=0)).sum()
+    probs = None
 
     # Run the Expectation-Maximization algorithm.
     for i in range(30):
         # E-step: Compute the probability of each point belonging to each component.
         diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
         # Work in log space most of the time to avoid numerical issues.
-        log_cond_probs[:, :-1] = (
-            -X.shape[1] * np.log(2 * np.pi) / 2
-            - 0.5 * np.log(np.linalg.det(covs))
-            - 0.5 * np.einsum("...i,...ij,...j->...", diff, np.linalg.inv(covs), diff)
-        )
+        try:
+            log_cond_probs[:, :-1] = (
+                -X.shape[1] * np.log(2 * np.pi) / 2
+                - 0.5 * np.log(np.linalg.det(covs))
+                - 0.5 * np.einsum("...i,...ij,...j->...", diff, np.linalg.inv(covs), diff)
+            )
+        except np.linalg.LinAlgError:
+            print("Warning: Code clustering did not converge.")
+            break
         log_probs = np.log(proportions) + log_cond_probs
         log_probs -= scipy.special.logsumexp(log_probs, axis=1)[:, np.newaxis]
         probs = np.exp(log_probs)
@@ -176,7 +183,12 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     # Assign each bead a code based on the clustering we just found.
     nonzero_tags = np.append(nonzero_tags, -1)
     tag_names = np.append(tag_names, "outlier")
-    tag_idxs = nonzero_tags[np.argmax(probs, axis=1)]
+    if probs is not None:
+        tag_idxs = nonzero_tags[np.argmax(probs, axis=1)]
+    else:
+        tag_idxs = np.argmin(
+            np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
+        )
     assay = assay.assign_coords(
         tag=("mark", tag_names[tag_idxs]),
     )
