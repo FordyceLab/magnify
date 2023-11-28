@@ -21,7 +21,7 @@ class Stitcher:
         # Move the time and channel axes back to the front.
         images = images.transpose("channel", "time", "im_y", "im_x")
         # Add the stitched images to the dataset.
-        assay["image"] = images.persist()
+        assay["image"] = images
         return assay
 
     @components.register("stitch")

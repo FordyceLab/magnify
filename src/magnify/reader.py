@@ -223,7 +223,9 @@ class Reader:
                 for (meta_name, dim), meta_idxs_dict in meta_dict.items():
                     if dim == "time":
                         # Make sure we're indexing using datetimes.
-                        dim_idxs = [datetime.datetime.fromtimestamp(idx) for idx in assay[dim].values]
+                        dim_idxs = [
+                            datetime.datetime.fromtimestamp(idx) for idx in assay[dim].values
+                        ]
                     else:
                         dim_idxs = assay[dim].values
 
@@ -281,7 +283,9 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
 
         # Get meta information that provides alternate value mappings for a given key
         # along with any formatting information e.g. (concentration_time|float).
-        meta_search = re.findall(rf"\(([^\(]*?)_{key}(?:\s*\|\s*(.*?))?(?:\s*\|\s*(.*?))?\)", pattern)
+        meta_search = re.findall(
+            rf"\(([^\(]*?)_{key}(?:\s*\|\s*(.*?))?(?:\s*\|\s*(.*?))?\)", pattern
+        )
         for name, formatter_str, format_str in meta_search:
             meta_formatter = default_formatters[formatter_str]
             # Once again we need to set default arguments because of closure rules in Python.

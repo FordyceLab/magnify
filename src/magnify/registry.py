@@ -36,7 +36,9 @@ def ps_chip(**kwargs):
     config = defaults.merge(confection.Config(kwargs))
     pipe = Pipeline("read", config=config)
     pipe.add_pipe("identify_buttons")
+    pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
+    pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("find_buttons")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
@@ -49,7 +51,7 @@ def ps_chip(**kwargs):
 def pc_chip(**kwargs):
     # Button centers are apart 412um vertically and 760um horizontally.
     # Assuming a 4x objective and 2x2 binning each pixel is 3.22um.
-    defaults = confection.Config(dict(row_dist=412 / 3.22, col_dist=760 / 3.22))
+    defaults = confection.Config(dict(row_dist=406 / 3.22, col_dist=750 / 3.22))
     config = defaults.merge(confection.Config(kwargs))
     pipe = Pipeline("read", config=config)
     pipe.add_pipe("identify_buttons")
@@ -71,6 +73,7 @@ def mrbles(**kwargs):
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
     pipe.add_pipe("identify_mrbles")
+    # pipe.add_pipe("circularize")
     pipe.add_pipe("drop")
 
     return pipe
@@ -81,6 +84,7 @@ def beads(**kwargs):
     pipe.add_pipe("flatfield_correct")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
+    pipe.add_pipe("circularize")
     pipe.add_pipe("drop")
 
     return pipe
