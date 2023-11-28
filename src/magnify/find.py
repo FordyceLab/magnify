@@ -9,6 +9,7 @@ import dask.array as da
 import numba
 import numpy as np
 import scipy
+import sklearn.mixture
 import tqdm
 import xarray as xr
 
@@ -457,39 +458,83 @@ class BeadFinder:
         for t in assay.time:
             for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
-                # Find a mask of all bright spots.
-                thresh = cv.adaptiveThreshold(
-                    image,
-                    maxValue=255,
-                    adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    thresholdType=cv.THRESH_BINARY,
-                    blockSize=2 * self.max_bead_radius + 1,
-                    C=-5,
-                )
-                # Find points far away from any dim spots.
-                dist = cv.distanceTransform(thresh, cv.DIST_L2, cv.DIST_MASK_PRECISE)
-                max_len = 2 * self.min_bead_radius + 1
-                # Get local maxima using a dilation filter.
-                local_max = cv.dilate(dist, kernel=np.ones((max_len, max_len)))
-                max_mask = (dist == local_max).astype(np.int32)
-                # Remove local maxima that are a small distance from the background.
-                max_mask[local_max < self.min_bead_radius] = 0
-                # Only keep a single local maximum per nearby maxima.
-                max_idxs = np.column_stack(np.where(max_mask))
-                duplicates = scipy.spatial.KDTree(max_idxs).query_pairs(
-                    self.min_bead_radius, output_type="ndarray"
-                )[:, 1]
-                max_mask[tuple(max_idxs[duplicates].T)] = 0
-                # Set the label of each local maximum.
-                max_idxs = np.delete(max_idxs, duplicates, axis=0)
-                max_mask[tuple(max_idxs.T)] = np.arange(1, len(max_idxs) + 1)
+                # Step 1: Denoise the image for more accurate edge finding.
+                image = cv.fastNlMeansDenoising(image)
 
-                # Use watershed to separate touching beads.
-                l = cv.watershed(cv.cvtColor(image, cv.COLOR_GRAY2BGR), max_mask)
-                l[l == -1] = 0
-                # Make labels contiguous in case watershed removed some.
-                l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
-                c = get_label_centers(l)
+                # Step 2: Find edges from image gradients.
+                dx = cv.Scharr(image, ddepth=cv.CV_16S, dx=1, dy=0)
+                dy = cv.Scharr(image, ddepth=cv.CV_16S, dx=0, dy=1)
+                grad = np.abs(dx) + np.abs(dy)
+                # Assuming at least 1% of the image contains beads the local maxima will usually
+                # be an edge so use that to set a reasonable upper threshold for edge finding.
+                grad_max = cv.dilate(
+                    grad, np.ones((10 * self.max_bead_radius, 10 * self.max_bead_radius))
+                )
+                # The median gradient should be background so use it as the lower threshold.
+                edges = 255 - cv.Canny(
+                    dx=dx, dy=dy, threshold1=np.median(grad), threshold2=np.median(grad_max) / 3
+                )
+
+                # Step 3: Treat edges as boundaries to find connected components that are either
+                # all background or foreground.
+                edge_width = self.min_bead_radius // 2
+                kernel = cv.getStructuringElement(
+                    cv.MORPH_ELLIPSE, (2 * edge_width + 1, 2 * edge_width + 1)
+                )
+                # Thicken edges to make sure they will be closed.
+                edges = cv.erode(edges, kernel)
+                _, l, stats, c = cv.connectedComponentsWithStats(
+                    edges, connectivity=8, ltype=cv.CV_16U
+                )
+
+                # Step 4: Filter out regions that don't meet size criteria or aren't bright enough.
+                min_radius = self.min_bead_radius - edge_width
+                # Take into account the fact that beads are smaller because we grew edges.
+                is_fg = (
+                    (stats[:, cv.CC_STAT_WIDTH] >= 2 * min_radius)
+                    & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * min_radius)
+                    & (stats[:, cv.CC_STAT_AREA] >= np.pi * min_radius**2)
+                    & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_bead_radius + 200)
+                    & (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_bead_radius)
+                    & (stats[:, cv.CC_STAT_AREA] <= np.pi * self.max_bead_radius**2)
+                )
+
+                # Estimate the median background and foreground intensity.
+                fg_vals = []
+                bg_vals = []
+                for i in range(1, l.max() + 1):
+                    if is_fg[i]:
+                        fg_vals.append(np.median(image[l == i]))
+                    else:
+                        bg_vals.append(image[l == i])
+                fg_median = np.median(fg_vals)
+                bg_median = np.median(np.concatenate(bg_vals))
+
+                # Exclude foreground components whose brightness is similar to background if the
+                # distribution of foregrounds looks bimodal.
+                fg_vals = np.array(fg_vals)[:, np.newaxis]
+                mixture = sklearn.mixture.GaussianMixture(
+                    n_components=2, covariance_type="diag", means_init=([[bg_median], [fg_median]])
+                ).fit(fg_vals)
+                if mixture.bic(fg_vals) < sklearn.mixture.GaussianMixture(n_components=1).fit(
+                    fg_vals
+                ).bic(fg_vals):
+                    is_fg[is_fg] &= mixture.predict(fg_vals) == 1
+
+                # Reindex labels to be contiguous and set all non-foregrounds to 0.
+                label_idx = 1
+                for i in range(1, l.max() + 1):
+                    if is_fg[i]:
+                        l[l == i] = label_idx
+                        label_idx += 1
+                    else:
+                        # TODO: We should handle edges differently since they're not backgrounds.
+                        l[l == i] = 0
+
+                # Redilate all foreground components to account for the erosion we did earlier.
+                l = cv.dilate(l, kernel)
+
+                # Step 5: Add new beads to previous channels' results.
                 if len(centers) > 0:
                     # Exclude beads that we've already seen.
                     duplicates = np.array(
@@ -629,6 +674,7 @@ def cluster_1d(
     ideal_num_points: np.ndarray,
     penalty: float,
 ) -> np.ndarray:
+    print(num_clusters, cluster_length, num_clusters * cluster_length, total_length)
     # Find the best clustering using the accumulate ragged array trick.
     # See: https://vladfeinberg.com/2021/01/07/vectorizing-ragged-arrays.html
     permutation = np.argsort(points)
