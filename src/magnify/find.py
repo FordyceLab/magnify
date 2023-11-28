@@ -459,7 +459,7 @@ class BeadFinder:
             for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
                 # Step 1: Denoise the image for more accurate edge finding.
-                image = cv.fastNlMeansDenoising(image)
+                image = cv.GaussianBlur(image, (5, 5), 0)
 
                 # Step 2: Find edges from image gradients.
                 dx = cv.Scharr(image, ddepth=cv.CV_16S, dx=1, dy=0)
@@ -477,9 +477,9 @@ class BeadFinder:
 
                 # Step 3: Treat edges as boundaries to find connected components that are either
                 # all background or foreground.
-                edge_width = self.min_bead_radius // 2
+                edge_width = 2 * self.min_bead_radius
                 kernel = cv.getStructuringElement(
-                    cv.MORPH_ELLIPSE, (2 * edge_width + 1, 2 * edge_width + 1)
+                    cv.MORPH_ELLIPSE, (edge_width + 1, edge_width + 1)
                 )
                 # Thicken edges to make sure they will be closed.
                 edges = cv.erode(edges, kernel)
@@ -491,9 +491,9 @@ class BeadFinder:
                 min_radius = self.min_bead_radius - edge_width
                 # Take into account the fact that beads are smaller because we grew edges.
                 is_fg = (
-                    (stats[:, cv.CC_STAT_WIDTH] >= 2 * min_radius)
-                    & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * min_radius)
-                    & (stats[:, cv.CC_STAT_AREA] >= np.pi * min_radius**2)
+                    (stats[:, cv.CC_STAT_WIDTH] >= min_radius)
+                    & (stats[:, cv.CC_STAT_HEIGHT] >= min_radius)
+                    & (stats[:, cv.CC_STAT_AREA] >= 2 * np.pi * min_radius)
                     & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_bead_radius + 200)
                     & (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_bead_radius)
                     & (stats[:, cv.CC_STAT_AREA] <= np.pi * self.max_bead_radius**2)
@@ -507,19 +507,23 @@ class BeadFinder:
                         fg_vals.append(np.median(image[l == i]))
                     else:
                         bg_vals.append(image[l == i])
+                fg_vals = np.array(fg_vals)
+                bg_vals = np.concatenate(bg_vals)
                 fg_median = np.median(fg_vals)
-                bg_median = np.median(np.concatenate(bg_vals))
+                bg_median = np.median(bg_vals)
 
                 # Exclude foreground components whose brightness is similar to background if the
                 # distribution of foregrounds looks bimodal.
-                fg_vals = np.array(fg_vals)[:, np.newaxis]
-                mixture = sklearn.mixture.GaussianMixture(
-                    n_components=2, covariance_type="diag", means_init=([[bg_median], [fg_median]])
-                ).fit(fg_vals)
-                if mixture.bic(fg_vals) < sklearn.mixture.GaussianMixture(n_components=1).fit(
-                    fg_vals
-                ).bic(fg_vals):
-                    is_fg[is_fg] &= mixture.predict(fg_vals) == 1
+                vals = np.concatenate([fg_vals, bg_vals[: len(fg_vals)]])[:, np.newaxis]
+                fg_vals = fg_vals[:, np.newaxis]
+                is_fg[is_fg] = (
+                    sklearn.mixture.GaussianMixture(
+                        n_components=2, means_init=([[bg_median], [fg_median]])
+                    )
+                    .fit(vals)
+                    .predict(fg_vals)
+                    == 1
+                )
 
                 # Reindex labels to be contiguous and set all non-foregrounds to 0.
                 label_idx = 1
@@ -535,6 +539,7 @@ class BeadFinder:
                 l = cv.dilate(l, kernel)
 
                 # Step 5: Add new beads to previous channels' results.
+                c = c[is_fg]
                 if len(centers) > 0:
                     # Exclude beads that we've already seen.
                     duplicates = np.array(

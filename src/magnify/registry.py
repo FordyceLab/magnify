@@ -72,8 +72,8 @@ def mrbles(**kwargs):
     pipe.add_pipe("flatfield_correct")
     pipe.add_pipe("stitch")
     pipe.add_pipe("find_beads")
+    pipe.add_pipe("circularize")
     pipe.add_pipe("identify_mrbles")
-    # pipe.add_pipe("circularize")
     pipe.add_pipe("drop")
 
     return pipe
