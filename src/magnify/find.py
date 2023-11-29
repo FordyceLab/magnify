@@ -679,7 +679,6 @@ def cluster_1d(
     ideal_num_points: np.ndarray,
     penalty: float,
 ) -> np.ndarray:
-    print(num_clusters, cluster_length, num_clusters * cluster_length, total_length)
     # Find the best clustering using the accumulate ragged array trick.
     # See: https://vladfeinberg.com/2021/01/07/vectorizing-ragged-arrays.html
     permutation = np.argsort(points)

@@ -9,8 +9,8 @@ import magnify.registry as registry
 
 
 @registry.component("filter_expression")
-def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None = "egfp"):
-    if search_channel == "all":
+def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None = None):
+    if search_channel is None:
         search_channels = assay.channel
     else:
         search_channels = utils.to_list(search_channel)
@@ -36,9 +36,9 @@ def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None 
 
 @registry.component("filter_nonround")
 def filter_nonround(
-    assay: xr.Dataset, min_roundness: float = 0.85, search_channel: str | list[str] | None = "egfp"
+    assay: xr.Dataset, min_roundness: float = 0.85, search_channel: str | list[str] | None = None
 ):
-    if search_channel == "all":
+    if search_channel is None:
         search_channels = assay.channel
     else:
         search_channels = utils.to_list(search_channel)
@@ -63,8 +63,8 @@ def filter_nonround(
 
 
 @registry.component("filter_leaky")
-def filter_leaky_buttons(assay: xr.Dataset, search_channel: str | list[str] | None = "egfp"):
-    if search_channel == "all":
+def filter_leaky_buttons(assay: xr.Dataset, search_channel: str | list[str] | None = None):
+    if search_channel is None:
         search_channels = assay.channel
     else:
         search_channels = utils.to_list(search_channel)
