@@ -25,6 +25,19 @@ def circle(image_length: int, row: int, col: int, radius: int, value: Any = 1.0)
     return image
 
 
+def annulus(
+    image_length: int, row: int, col: int, outer_radius: int, inner_radius: int, value: Any = 1.0
+) -> np.ndarray:
+    outer_circle = circle(image_length, row, col, outer_radius, value)
+    inner_circle = circle(image_length, row, col, inner_radius, value)
+    return outer_circle & ~inner_circle
+
+
+def contour_center(contour):
+    m = cv.moments(contour)
+    return m["m01"] / m["m00"], m["m10"] / m["m00"]
+
+
 @numba.jit(nopython=True)
 def ceildiv(a: int, b: int) -> int:
     return -(a // -b)

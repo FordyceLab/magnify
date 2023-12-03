@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "magnify"
-version = "0.5.5"
+version = "0.5.6"
 description = "A microscopy image processing toolkit."
 authors = ["Karl Krauth <karl.krauth@gmail.com>"]
 readme = "README.md"
@@ -18,7 +18,7 @@ plotly = "^5.18.0"
 tifffile = ">=2021.11.2"
 tqdm = "^4.64"
 types-tqdm = "^4.64"
-xarray = {extras = ["complete"], version = ">=2023.01.0"}
+xarray = {extras = ["io"], version = ">=2023.01.0"}
 dask = {extras = ["complete"], version = ">=2022.02.0"}
 catalogue = "^2.0.8"
 beautifulsoup4 = "^4.10.0"
