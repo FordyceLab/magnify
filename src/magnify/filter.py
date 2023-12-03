@@ -9,7 +9,11 @@ import magnify.registry as registry
 
 
 @registry.component("filter_expression")
-def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None = None):
+def filter_expression(
+    assay: xr.Dataset,
+    search_channel: str | list[str] | None = None,
+    min_contrast: int | None = None,
+):
     if search_channel is None:
         search_channels = assay.channel
     else:
@@ -18,16 +22,19 @@ def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None 
     valid = xr.zeros_like(assay.valid, dtype=bool)
     for channel in search_channels:
         subassay = assay.isel(time=0).sel(channel=channel)
-        # Compute the intensity differences between every pair of backgrounds on the first timestep.
-        bg = subassay.roi.where(subassay.bg).median(dim=["roi_x", "roi_y"]).compute()
-        bg_n = bg.to_numpy().flatten()
-        diffs = bg_n[:, np.newaxis] - bg_n[np.newaxis, :]
-        offdiag = np.ones_like(diffs, dtype=bool) & (~np.eye(len(diffs), dtype=bool))
-        diffs = diffs[offdiag]
-
-        # Include any markers where the fg - bg is above 5 sigma of the mean difference.
-        upper_bound = 5 * diffs.std()
         fg = subassay.roi.where(subassay.fg).median(dim=["roi_x", "roi_y"]).compute()
+        bg = subassay.roi.where(subassay.bg).median(dim=["roi_x", "roi_y"]).compute()
+        if min_contrast is None:
+            # Compute the intensity differences between every pair of backgrounds on the first timestep.
+            bg_n = bg.to_numpy().flatten()
+            diffs = bg_n[:, np.newaxis] - bg_n[np.newaxis, :]
+            offdiag = np.ones_like(diffs, dtype=bool) & (~np.eye(len(diffs), dtype=bool))
+            diffs = diffs[offdiag]
+
+            # Include any markers where the fg - bg is above 5 sigma of the mean difference.
+            upper_bound = expression_std * diffs.std()
+        else:
+            upper_bound = min_contrast
         valid |= fg - bg > upper_bound
 
     assay["valid"] &= valid
@@ -36,7 +43,7 @@ def filter_expression(assay: xr.Dataset, search_channel: str | list[str] | None 
 
 @registry.component("filter_nonround")
 def filter_nonround(
-    assay: xr.Dataset, min_roundness: float = 0.85, search_channel: str | list[str] | None = None
+    assay: xr.Dataset, min_roundness: float = 0.75, search_channel: str | list[str] | None = None
 ):
     if search_channel is None:
         search_channels = assay.channel

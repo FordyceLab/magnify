@@ -209,7 +209,6 @@ class ButtonFinder:
                 thresh = np.quantile(np.maximum(image.astype(np.int16) - blur, 0), 1 - 2 * q)
             else:
                 thresh = 255 * self.min_contrast / image_max
-            print(thresh)
             mask = utils.to_uint8(image > blur + thresh)
 
             # Step 2: Find connected components and filter out points.
@@ -365,17 +364,11 @@ class ButtonFinder:
                             # Save this contour if it's the roundest one.
                             roundness = 4 * np.pi * area / perimeter**2
                             if i == 3 and j == 25:
-                                print(roundness, self.min_roundness)
                             if roundness > best_roundness and roundness > self.min_roundness:
                                 best_roundness = roundness
                                 best_contour = c
                                 best_subimage = subimage
 
-                if i == 3 and j == 25:
-                    import matplotlib.pyplot as plt
-
-                    print(best_roundness)
-                    plt.imshow(mask)
                 # Update our estimate of the button position if we found some circles.
                 if best_contour is not None:
                     y[i, j], x[i, j] = utils.contour_center(best_contour[0])
