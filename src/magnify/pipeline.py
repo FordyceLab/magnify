@@ -64,3 +64,38 @@ class Pipeline:
             idx = [name for (name, _) in self.components].index(after) + 1
 
         self.components.insert(idx, new_element)
+
+    def add_pipe(
+        self,
+        name: str,
+        after: str | int | None = None,
+        before: str | int | None = None,
+        first: bool = False,
+        last: bool = False,
+    ) -> None:
+        component_factory = registry.components.get(name)
+        component = component_factory(**utils.valid_kwargs(self.config, component_factory))
+
+        if after is None and before is None and not first and not last:
+            last = True
+        if (after is not None) + (before is not None) + first + last > 1:
+            raise ValueError("Only one of after, before, first, and last can be set.")
+        new_element = (name, component)
+        if first:
+            idx = 0
+        elif last:
+            idx = len(self.components)
+        elif isinstance(before, int):
+            idx = before
+        elif isinstance(before, str):
+            idx = [name for (name, _) in self.components].index(before)
+        elif isinstance(after, int):
+            idx = after + 1
+        elif isinstance(after, str):
+            idx = [name for (name, _) in self.components].index(after) + 1
+
+        self.components.insert(idx, new_element)
+
+    def remove_pipe(self, name: str) -> None:
+        idx = list(zip(*self.components))[0].index(name)
+        self.components.pop(idx)

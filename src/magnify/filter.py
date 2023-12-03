@@ -32,7 +32,7 @@ def filter_expression(
             diffs = diffs[offdiag]
 
             # Include any markers where the fg - bg is above 5 sigma of the mean difference.
-            upper_bound = expression_std * diffs.std()
+            upper_bound = 4 * diffs.std()
         else:
             upper_bound = min_contrast
         valid |= fg - bg > upper_bound
