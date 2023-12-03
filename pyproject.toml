@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "magnify"
-version = "0.6.0"
+version = "0.6.1"
 description = "A microscopy image processing toolkit."
 authors = ["Karl Krauth <karl.krauth@gmail.com>"]
 readme = "README.md"
@@ -25,6 +25,7 @@ beautifulsoup4 = "^4.10.0"
 lxml = "^4.6.0"
 confection = "^0.0.4"
 scikit-learn = "^1.2.0"
+numba = "^0.56.0"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=22.6.0"
