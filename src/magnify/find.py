@@ -363,7 +363,6 @@ class ButtonFinder:
                                 continue
                             # Save this contour if it's the roundest one.
                             roundness = 4 * np.pi * area / perimeter**2
-                            if i == 3 and j == 25:
                             if roundness > best_roundness and roundness > self.min_roundness:
                                 best_roundness = roundness
                                 best_contour = c
