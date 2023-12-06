@@ -4,6 +4,7 @@ import math
 import logging
 
 from numpy.typing import ArrayLike
+from skimage.segmentation import random_walker
 import cv2 as cv
 import dask.array as da
 import numba
@@ -480,47 +481,44 @@ class BeadFinder:
             self.search_channels = assay.channel
 
         centers = np.empty((0, 2))
-        labels = np.zeros((assay.sizes["im_y"], assay.sizes["im_x"]), dtype=int)
+        labels = np.ones((assay.sizes["im_y"], assay.sizes["im_x"]), dtype=int)
         for t in assay.time:
             for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
                 # Step 1: Denoise the image for more accurate edge finding.
-                image = cv.GaussianBlur(image, (5, 5), 0)
+                blur = cv.GaussianBlur(image, (5, 5), 0)
 
                 # Step 2: Find edges from image gradients.
-                dx = cv.Scharr(image, ddepth=cv.CV_16S, dx=1, dy=0)
-                dy = cv.Scharr(image, ddepth=cv.CV_16S, dx=0, dy=1)
-                grad = np.abs(dx) + np.abs(dy)
-                # Assuming at least 1% of the image contains beads the local maxima will usually
-                # be an edge so use that to set a reasonable upper threshold for edge finding.
-                grad_max = cv.dilate(
-                    grad, np.ones((10 * self.max_bead_radius, 10 * self.max_bead_radius))
-                )
-                # The median gradient should be background so use it as the lower threshold.
-                edges = 255 - cv.Canny(
-                    dx=dx, dy=dy, threshold1=np.median(grad), threshold2=np.median(grad_max) / 3
+                dx = cv.Scharr(blur, ddepth=cv.CV_32F, dx=1, dy=0)
+                dy = cv.Scharr(blur, ddepth=cv.CV_32F, dx=0, dy=1)
+                grad = np.sqrt(dx**2 + dy**2)
+                edges = cv.adaptiveThreshold(
+                    utils.to_uint8(grad),
+                    1,
+                    cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    cv.THRESH_BINARY,
+                    2 * self.max_bead_radius + 1,
+                    -5,
                 )
 
                 # Step 3: Treat edges as boundaries to find connected components that are either
                 # all background or foreground.
-                edge_width = 2 * self.min_bead_radius
-                kernel = cv.getStructuringElement(
-                    cv.MORPH_ELLIPSE, (edge_width + 1, edge_width + 1)
-                )
-                # Thicken edges to make sure they will be closed.
-                edges = cv.erode(edges, kernel)
-                _, l, stats, c = cv.connectedComponentsWithStats(
-                    edges, connectivity=8, ltype=cv.CV_16U
-                )
+                edge_width = 2 * (self.min_bead_radius // 4) + 1
+                kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (edge_width, edge_width))
+                # Make sure edges are closed and merge small spurious edges.
+                edges = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel)
+                _, l, stats, c = cv.connectedComponentsWithStats(1 - edges, connectivity=4)
+                # Ignore the background component.
+                c = c[1:]
+                stats = stats[1:]
 
                 # Step 4: Filter out regions that don't meet size criteria or aren't bright enough.
-                min_radius = self.min_bead_radius - edge_width
-                # Take into account the fact that beads are smaller because we grew edges.
+                min_radius = self.min_bead_radius // 2
                 is_fg = (
                     (stats[:, cv.CC_STAT_WIDTH] >= min_radius)
                     & (stats[:, cv.CC_STAT_HEIGHT] >= min_radius)
-                    & (stats[:, cv.CC_STAT_AREA] >= 2 * np.pi * min_radius)
-                    & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_bead_radius + 200)
+                    & (stats[:, cv.CC_STAT_AREA] >= np.pi * min_radius**2)
+                    & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_bead_radius)
                     & (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_bead_radius)
                     & (stats[:, cv.CC_STAT_AREA] <= np.pi * self.max_bead_radius**2)
                 )
@@ -529,7 +527,7 @@ class BeadFinder:
                 fg_vals = []
                 bg_vals = []
                 for i in range(1, l.max() + 1):
-                    if is_fg[i]:
+                    if is_fg[i - 1]:
                         fg_vals.append(np.median(image[l == i]))
                     else:
                         bg_vals.append(image[l == i])
@@ -538,8 +536,7 @@ class BeadFinder:
                 fg_median = np.median(fg_vals)
                 bg_median = np.median(bg_vals)
 
-                # Exclude foreground components whose brightness is similar to background if the
-                # distribution of foregrounds looks bimodal.
+                # Exclude components whose brightness is similar to background.
                 vals = np.concatenate([fg_vals, bg_vals[: len(fg_vals)]])[:, np.newaxis]
                 fg_vals = fg_vals[:, np.newaxis]
                 is_fg[is_fg] = (
@@ -551,23 +548,15 @@ class BeadFinder:
                     == 1
                 )
 
-                # Reindex labels to be contiguous and set all non-foregrounds to 0.
-                label_idx = 1
-                for i in range(1, l.max() + 1):
-                    if is_fg[i]:
-                        l[l == i] = label_idx
-                        label_idx += 1
-                    else:
-                        # TODO: We should handle edges differently since they're not backgrounds.
-                        l[l == i] = 0
-
-                # Redilate all foreground components to account for the erosion we did earlier.
-                l = cv.dilate(l, kernel)
-
-                # Step 5: Add new beads to previous channels' results.
+                # Step 5: Add new segmentations to previous channels' results.
                 c = c[is_fg]
+                # Set non-foreground components as background (1) and keep edges as unknown (0).
+                l[l != 0] += 1
+                l[np.isin(l, np.where(~is_fg)[0] + 2)] = 1
+                l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
                 if len(centers) > 0:
                     # Exclude beads that we've already seen.
+                    # TODO: We should look at overlapping labels.
                     duplicates = np.array(
                         [
                             len(neighbors) > 0
@@ -577,11 +566,13 @@ class BeadFinder:
                         ]
                     )
                     c = c[~duplicates]
-                    l[np.isin(l, np.where(duplicates)[0] + 1)] = 0
+                    l[np.isin(l, np.where(duplicates)[0] + 2)] = 1
                     l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
                 centers = np.concatenate([centers, c])
-                nnz = l != 0
-                labels[nnz] = l[nnz] + labels.max()
+                unknown = (l == 0) & (labels == 1)
+                labels[unknown] = 0
+                fg = l > 1
+                labels[fg] = l[fg] + labels.max() - 1
 
         num_beads = len(centers)
         # Store each channel and timesteps for each marker in one chunk and set marker row/col
@@ -631,10 +622,6 @@ class BeadFinder:
                 ("mark", "time"),
                 np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
             ),
-            valid=(
-                ("mark", "time"),
-                np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
-            ),
         )
 
         # Compute the foreground and background masks for all buttons.
@@ -644,6 +631,7 @@ class BeadFinder:
         y = assay.y.sel(time=0).to_numpy()
         fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
         bg = np.empty_like(fg)
+        image = assay.image.sel(time=0, channel=self.search_channels).to_numpy()
         for i in range(num_beads):
             # Set the subimage region for this bead.
             top, bottom, left, right = utils.bounding_box(
@@ -653,13 +641,19 @@ class BeadFinder:
                 assay.sizes["im_x"],
                 assay.sizes["im_y"],
             )
+            rel_x = round(x[i]) - left
+            rel_y = round(y[i]) - top
+            subimage = image[:, top:bottom, left:right]
+            sublabels = labels[top:bottom, left:right]
+            sublabels = random_walker(subimage, sublabels, mode="bf", channel_axis=0)
             # Set the foreground of the bead.
-            fg[i] = labels[top:bottom, left:right] == i + 1
+            fg[i] = sublabels == sublabels[rel_y, rel_x]
             # Set the background to be the region assigned to no beads.
             bg[i] = labels[top:bottom, left:right] == 0
         assay.fg[:] = fg[:, np.newaxis]
         assay.bg[:] = bg[:, np.newaxis]
 
+        # Individually add each channel to save on memory.
         for i, channel in enumerate(assay.channel):
             image = assay.image.sel(channel=channel).to_numpy()
             roi = np.empty((num_beads,) + assay.roi.shape[2:], dtype=assay.roi.dtype)
@@ -678,7 +672,12 @@ class BeadFinder:
         assay["roi"] = assay.roi.persist()
         assay["fg"] = assay.fg.persist()
         assay["bg"] = assay.bg.persist()
-        assay = assay.assign_coords()
+        assay = assay.assign_coords(
+            valid=(
+                ("mark", "time"),
+                np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
+            ),
+        )
         return assay
 
     @registry.components.register("find_beads")
@@ -803,3 +802,34 @@ def get_label_centers(labels):
             num_points[k] += 1
     centers /= np.expand_dims(num_points, axis=1)
     return centers[1:]
+
+
+@numba.njit
+def acc_func(row, col, g, r):
+    acc = np.zeros(row.shape)
+    for i in range(row.shape[0]):
+        for j in range(row.shape[1]):
+            for k in range(row.shape[2]):
+                if (
+                    row[i, j, k] >= 0
+                    and row[i, j, k] < g.shape[0]
+                    and col[i, j, k] >= 0
+                    and col[i, j, k] < g.shape[1]
+                ):
+                    acc[row[i, j, k], col[i, j, k], k] += g[i, j] / r[k]
+    return acc
+
+
+def watershed(grad, labels):
+    acc = np.zeros(row.shape)
+    for i in range(row.shape[0]):
+        for j in range(row.shape[1]):
+            for k in range(row.shape[2]):
+                if (
+                    row[i, j, k] >= 0
+                    and row[i, j, k] < g.shape[0]
+                    and col[i, j, k] >= 0
+                    and col[i, j, k] < g.shape[1]
+                ):
+                    acc[row[i, j, k], col[i, j, k], k] += g[i, j] / r[k]
+    return acc
