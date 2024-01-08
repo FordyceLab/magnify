@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import logging
 
+from numba import prange
 from numpy.typing import ArrayLike
 from skimage.segmentation import random_walker
 import cv2 as cv
@@ -468,11 +469,15 @@ class BeadFinder:
         self,
         min_bead_radius: int = 5,
         max_bead_radius: int = 25,
+        low_edge_quantile: float = 0.1,
+        high_edge_quantile: float = 0.9,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
+        self.low_edge_quantile = low_edge_quantile
+        self.high_edge_quantile = high_edge_quantile
         self.roi_length = roi_length
         self.search_channels = utils.to_list(search_channel)
 
@@ -485,45 +490,8 @@ class BeadFinder:
         for t in assay.time:
             for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
-                # Step 1: Denoise the image for more accurate edge finding.
-                blur = cv.GaussianBlur(image, (5, 5), 0)
-
-                # Step 2: Find edges from image gradients.
-                dx = cv.Scharr(blur, ddepth=cv.CV_32F, dx=1, dy=0)
-                dy = cv.Scharr(blur, ddepth=cv.CV_32F, dx=0, dy=1)
-                grad = np.sqrt(dx**2 + dy**2)
-                edges = cv.adaptiveThreshold(
-                    utils.to_uint8(grad),
-                    1,
-                    cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    cv.THRESH_BINARY,
-                    2 * self.max_bead_radius + 1,
-                    -5,
-                )
-
-                # Step 3: Treat edges as boundaries to find connected components that are either
-                # all background or foreground.
-                edge_width = 2 * (self.min_bead_radius // 4) + 1
-                kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (edge_width, edge_width))
-                # Make sure edges are closed and merge small spurious edges.
-                edges = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel)
-                _, l, stats, c = cv.connectedComponentsWithStats(1 - edges, connectivity=4)
-                # Ignore the background component.
-                c = c[1:]
-                stats = stats[1:]
-
-                # Step 4: Filter out regions that don't meet size criteria or aren't bright enough.
-                min_radius = self.min_bead_radius // 2
-                is_fg = (
-                    (stats[:, cv.CC_STAT_WIDTH] >= min_radius)
-                    & (stats[:, cv.CC_STAT_HEIGHT] >= min_radius)
-                    & (stats[:, cv.CC_STAT_AREA] >= np.pi * min_radius**2)
-                    & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_bead_radius)
-                    & (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_bead_radius)
-                    & (stats[:, cv.CC_STAT_AREA] <= np.pi * self.max_bead_radius**2)
-                )
-
-                # Estimate the median background and foreground intensity.
+                """
+                # Step 4: Estimate the median background and foreground intensity.
                 fg_vals = []
                 bg_vals = []
                 for i in range(1, l.max() + 1):
@@ -573,6 +541,10 @@ class BeadFinder:
                 labels[unknown] = 0
                 fg = l > 1
                 labels[fg] = l[fg] + labels.max() - 1
+                """
+                find_circles(
+                    img, grid_length, num_iter, low_edge_quantile, high_edge_quantile, grid_length
+                )
 
         num_beads = len(centers)
         # Store each channel and timesteps for each marker in one chunk and set marker row/col
@@ -684,12 +656,16 @@ class BeadFinder:
     def make(
         min_bead_radius: int = 5,
         max_bead_radius: int = 25,
+        low_edge_quantile: float = 0.1,
+        high_edge_quantile: float = 0.9,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
             max_bead_radius=max_bead_radius,
+            low_edge_quantile=low_edge_quantile,
+            high_edge_quantile=high_edge_quantile,
             roi_length=roi_length,
             search_channel=search_channel,
         )
@@ -789,47 +765,171 @@ def regress_clusters(
     return slope, intercepts
 
 
-@numba.jit(nopython=True)
-def get_label_centers(labels):
-    num_labels = labels.max() + 1
-    centers = np.zeros((num_labels, 2))
-    num_points = np.zeros(num_labels)
-    for i in range(labels.shape[0]):
-        for j in range(labels.shape[1]):
-            k = labels[i, j]
-            centers[k, 0] += j
-            centers[k, 1] += i
-            num_points[k] += 1
-    centers /= np.expand_dims(num_points, axis=1)
-    return centers[1:]
+def find_circles(
+    img: np.ndarray,
+    low_edge_quantile: float,
+    high_edge_quantile: float,
+    grid_length: int,
+    num_iter: int,
+    min_radius: int,
+    max_radius: int,
+    min_perimeter_fill: float,
+    min_dist: int,
+):
+    # Step 1: Denoise the image for more accurate edge finding.
+    img = cv.GaussianBlur(img, (5, 5), 0)
+
+    # Step 2: Find edges from image gradients.
+    dx = cv.Scharr(img, ddepth=cv.CV_32F, dx=1, dy=0)
+    dy = cv.Scharr(img, ddepth=cv.CV_32F, dx=0, dy=1)
+    grad = np.sqrt(dx**2 + dy**2)
+    edges = cv.Canny(
+        dx.astype(np.int16),
+        dy.astype(np.int16),
+        threshold1=np.quantile(grad, low_edge_quantile),
+        threshold2=np.quantile(grad, high_edge_quantile),
+        L2gradient=True,
+    )
+    edges[edges != 0] = 1
+
+    # Step 3: Use edges to find candidate circles.
+    circles = get_candidate_circles(edges, grid_length, num_iter)
+
+    # Step 4: Filter circles based on size and position.
+    # Remove circles that are too small or large.
+    circles = circles[(circles[:, 2] >= min_radius) & (circles[:, 2] <= max_radius)]
+    # Round circle coordinates since we'll only by considering whole pixels.
+    circles = np.round(circles).astype(np.int32)
+    # Remove circles that that are completely off the image.
+    circles = circles[
+        (circles[:, 0] + circles[:, 2] >= 0)
+        & (circles[:, 1] + circles[:, 2] >= 0)
+        & (circles[:, 0] - circles[:, 2] < img.shape[0])
+        & (circles[:, 1] - circles[:, 2] < img.shape[1])
+    ]
+
+    # Step 5: Filter circles with low number of edges on their circumference.
+    # Pad the edges to avoid boundary cases where circle are partially off the image.
+    pad = 2 * max_radius
+    edges = np.pad(edges, pad)
+    # Adjust circle coordinates to account for padding.
+    circles[:, :2] += pad
+    # Sort circles by radius.
+    order = np.argsort(circles[:, 2])
+    circles = circles[order]
+
+    start = 0
+    scores = []
+    for radius in range(min_radius, max_radius + 1):
+        perimeter = utils.circle(
+            2 * radius + 1, row=radius, col=radius, radius=radius, thickness=1, value=1
+        )
+        perimeter_coords = np.column_stack(np.where(perimeter)).astype(np.int32)
+        # Move the circle indices to be centered at (0,0).
+        perimeter_coords -= radius
+        end = np.searchsorted(circles[:, 2], radius + 1)
+        counts = count_perimeter(edges, circles[start:end, :2], perimeter_coords)
+        scores.append(counts / len(perimeter_coords))
+        start = end
+    circles[:, :2] -= pad
+    scores = np.concatenate(scores)
+    circles = circles[scores >= min_perimeter_fill]
+
+    # Step 6: Remove duplicate circles that are too close to each other.
+    return circles
+
+
+@numba.njit(parallel=True)
+def get_candidate_circles(edges, grid_length, num_iter):
+    # Find the coordinates of all edges.
+    coords = np.column_stack(np.where(edges))
+
+    # Create a coarse grid of the image for fast neighbor lookup.
+    grid_coords, grid_starts, grid_counts = grid_array(edges, grid_length)
+
+    # Generate the candidate circles by randomly sampling three nearby points
+    # and finding the circle that passes through these points.
+    circles = np.empty((num_iter, 3), dtype=np.float32)
+    for i in prange(num_iter):
+        # Randomly select a point from all edges.
+        p0 = coords[np.random.choice(len(coords))]
+        p0_grid = p0 // grid_length
+
+        # Randomly choose the next two points from the same grid cell as p0 and center the
+        # entire coordinate system on p0 to make calculations easier.
+        row = p0_grid[0]
+        col = p0_grid[1]
+        s = grid_starts[row, col]
+        e = s + grid_counts[row, col]
+        idx = grid_starts[row, col] + np.random.choice(grid_counts[row, col])
+        p1 = grid_coords[idx] - p0
+        idx = grid_starts[row, col] + np.random.choice(grid_counts[row, col])
+        p2 = grid_coords[idx] - p0
+
+        # The circle that passes through all three points will have a center at the intersection of
+        # the perpendicular bisectors of p0-p1 and p0-p2: https://en.wikipedia.org/wiki/Circumcircle
+        # Find the p0-p1 and p0-p2 midpoints.
+        mid1 = np.float32(0.5) * p1
+        mid2 = np.float32(0.5) * p2
+        # Find the slope and intercept of the perpendicular bisectors. Adding a small value to the
+        # denominator accounts for vertical slopes.
+        eps = np.float32(1e-20)
+        m1 = -p1[1] / (p1[0] + eps)
+        m2 = -p2[1] / (p2[0] + eps)
+        b1 = mid1[0] - m1 * mid1[1]
+        b2 = mid2[0] - m2 * mid2[1]
+        # Find the intersection of the two bisectors. If the two bisectors are parallel then
+        # the center coordinates will be large and the circle will get filtered out later.
+        circles[i, 1] = (b1 - b2) / (m2 - m1 + eps)
+        circles[i, 0] = m1 * circles[i, 1] + b1
+        # Find the radius of the circle with the knowledge that p0 i.e. (0, 0) is on the circle.
+        circles[i, 2] = np.sqrt(circles[i, 0] ** 2 + circles[i, 1] ** 2)
+        # Recenter the circle coordinates back to their original position.
+        circles[i, :2] = circles[i, :2] + p0
+
+    return circles
 
 
 @numba.njit
-def acc_func(row, col, g, r):
-    acc = np.zeros(row.shape)
-    for i in range(row.shape[0]):
-        for j in range(row.shape[1]):
-            for k in range(row.shape[2]):
-                if (
-                    row[i, j, k] >= 0
-                    and row[i, j, k] < g.shape[0]
-                    and col[i, j, k] >= 0
-                    and col[i, j, k] < g.shape[1]
-                ):
-                    acc[row[i, j, k], col[i, j, k], k] += g[i, j] / r[k]
-    return acc
+def grid_array(arr, grid_length):
+    num_rows = math.ceil(arr.shape[0] / grid_length)
+    num_cols = math.ceil(arr.shape[1] / grid_length)
+    grid_counts = np.empty((num_rows, num_cols), dtype=np.int64)
+    for i in range(num_rows):
+        for j in range(num_cols):
+            grid_counts[i, j] = arr[
+                i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+            ].sum()
+
+    # The number of edges in each grid cell is variable in length so we'll store
+    # their coordinates as a flat array and keep track of the starting indices for each grid cell.
+    grid_starts = np.empty_like(grid_counts)
+    grid_coords = np.empty((grid_counts.sum(), 2), dtype=np.int32)
+    n = 0
+    for i in range(num_rows):
+        for j in range(num_cols):
+            r, c = np.where(
+                arr[
+                    i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                ]
+            )
+            grid_starts[i, j] = n
+            grid_coords[n : n + len(r), 0] = r + i * grid_length
+            grid_coords[n : n + len(r), 1] = c + j * grid_length
+            n += len(r)
+
+    return grid_coords, grid_starts, grid_counts
 
 
-def watershed(grad, labels):
-    acc = np.zeros(row.shape)
-    for i in range(row.shape[0]):
-        for j in range(row.shape[1]):
-            for k in range(row.shape[2]):
-                if (
-                    row[i, j, k] >= 0
-                    and row[i, j, k] < g.shape[0]
-                    and col[i, j, k] >= 0
-                    and col[i, j, k] < g.shape[1]
-                ):
-                    acc[row[i, j, k], col[i, j, k], k] += g[i, j] / r[k]
-    return acc
+@numba.njit(parallel=True)
+def count_perimeter(edges, circles, perimeter_coords):
+    counts = np.empty(len(circles), dtype=np.float32)
+    for i in prange(len(circles)):
+        row = perimeter_coords[:, 0] + circles[i, 0]
+        col = perimeter_coords[:, 1] + circles[i, 1]
+        c = 0
+        for j in prange(len(row)):
+            c += edges[row[j], col[j]]
+        counts[i] = c
+
+    return counts
