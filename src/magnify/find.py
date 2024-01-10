@@ -471,6 +471,8 @@ class BeadFinder:
         max_bead_radius: int = 25,
         low_edge_quantile: float = 0.1,
         high_edge_quantile: float = 0.9,
+        num_iter: int = 5000000,
+        min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
     ):
@@ -478,6 +480,8 @@ class BeadFinder:
         self.max_bead_radius = max_bead_radius
         self.low_edge_quantile = low_edge_quantile
         self.high_edge_quantile = high_edge_quantile
+        self.num_iter = num_iter
+        self.min_roundness = min_roundness
         self.roi_length = roi_length
         self.search_channels = utils.to_list(search_channel)
 
@@ -485,68 +489,35 @@ class BeadFinder:
         if not self.search_channels:
             self.search_channels = assay.channel
 
-        centers = np.empty((0, 2))
-        labels = np.ones((assay.sizes["im_y"], assay.sizes["im_x"]), dtype=int)
+        beads = np.empty((0, 3))
         for t in assay.time:
             for search_channel in self.search_channels:
                 image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
-                """
-                # Step 4: Estimate the median background and foreground intensity.
-                fg_vals = []
-                bg_vals = []
-                for i in range(1, l.max() + 1):
-                    if is_fg[i - 1]:
-                        fg_vals.append(np.median(image[l == i]))
-                    else:
-                        bg_vals.append(image[l == i])
-                fg_vals = np.array(fg_vals)
-                bg_vals = np.concatenate(bg_vals)
-                fg_median = np.median(fg_vals)
-                bg_median = np.median(bg_vals)
-
-                # Exclude components whose brightness is similar to background.
-                vals = np.concatenate([fg_vals, bg_vals[: len(fg_vals)]])[:, np.newaxis]
-                fg_vals = fg_vals[:, np.newaxis]
-                is_fg[is_fg] = (
-                    sklearn.mixture.GaussianMixture(
-                        n_components=2, means_init=([[bg_median], [fg_median]])
-                    )
-                    .fit(vals)
-                    .predict(fg_vals)
-                    == 1
+                b = find_circles(
+                    image,
+                    low_edge_quantile=self.low_edge_quantile,
+                    high_edge_quantile=self.high_edge_quantile,
+                    grid_length=20,
+                    num_iter=self.num_iter,
+                    min_radius=self.min_bead_radius,
+                    max_radius=self.max_bead_radius,
+                    min_dist=2 * self.min_bead_radius,
+                    min_roundness=self.min_roundness,
                 )
-
-                # Step 5: Add new segmentations to previous channels' results.
-                c = c[is_fg]
-                # Set non-foreground components as background (1) and keep edges as unknown (0).
-                l[l != 0] += 1
-                l[np.isin(l, np.where(~is_fg)[0] + 2)] = 1
-                l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
-                if len(centers) > 0:
+                if len(beads) > 0:
                     # Exclude beads that we've already seen.
-                    # TODO: We should look at overlapping labels.
                     duplicates = np.array(
                         [
                             len(neighbors) > 0
-                            for neighbors in scipy.spatial.KDTree(centers).query_ball_point(
-                                c, 2 * self.min_bead_radius
+                            for neighbors in scipy.spatial.KDTree(beads[:, :2]).query_ball_point(
+                                b[:, :2], 2 * self.min_bead_radius
                             )
                         ]
                     )
-                    c = c[~duplicates]
-                    l[np.isin(l, np.where(duplicates)[0] + 2)] = 1
-                    l = np.unique(l, return_inverse=True)[1].reshape(l.shape)
-                centers = np.concatenate([centers, c])
-                unknown = (l == 0) & (labels == 1)
-                labels[unknown] = 0
-                fg = l > 1
-                labels[fg] = l[fg] + labels.max() - 1
-                """
-                find_circles(
-                    img, grid_length, num_iter, low_edge_quantile, high_edge_quantile, grid_length
-                )
+                    b = b[~duplicates]
+                beads = np.concatenate([beads, b])
 
-        num_beads = len(centers)
+        num_beads = len(beads)
         # Store each channel and timesteps for each marker in one chunk and set marker row/col
         # sizes so each chunk ends up being at least 50MB. We will rechunk later.
         chunk_bytes = 5e7
@@ -588,13 +559,16 @@ class BeadFinder:
             ),
             x=(
                 ("mark", "time"),
-                np.repeat(centers[:, np.newaxis, 0], assay.dims["time"], axis=1),
+                np.repeat(beads[:, np.newaxis, 1], assay.dims["time"], axis=1),
             ),
             y=(
                 ("mark", "time"),
-                np.repeat(centers[:, np.newaxis, 1], assay.dims["time"], axis=1),
+                np.repeat(beads[:, np.newaxis, 0], assay.dims["time"], axis=1),
             ),
         )
+
+        # Create a label array that contains the areas owned by each bead.
+        labels = circle_labels(beads.astype(int), assay.sizes["im_y"], assay.sizes["im_x"])
 
         # Compute the foreground and background masks for all buttons.
         # TODO: Don't assume beads don't move across timesteps.
@@ -613,15 +587,11 @@ class BeadFinder:
                 assay.sizes["im_x"],
                 assay.sizes["im_y"],
             )
-            rel_x = round(x[i]) - left
-            rel_y = round(y[i]) - top
-            subimage = image[:, top:bottom, left:right]
             sublabels = labels[top:bottom, left:right]
-            sublabels = random_walker(subimage, sublabels, mode="bf", channel_axis=0)
             # Set the foreground of the bead.
-            fg[i] = sublabels == sublabels[rel_y, rel_x]
+            fg[i] = sublabels == i
             # Set the background to be the region assigned to no beads.
-            bg[i] = labels[top:bottom, left:right] == 0
+            bg[i] = sublabels == -1
         assay.fg[:] = fg[:, np.newaxis]
         assay.bg[:] = bg[:, np.newaxis]
 
@@ -658,6 +628,8 @@ class BeadFinder:
         max_bead_radius: int = 25,
         low_edge_quantile: float = 0.1,
         high_edge_quantile: float = 0.9,
+        num_iter: int = 5000000,
+        min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
     ):
@@ -666,6 +638,8 @@ class BeadFinder:
             max_bead_radius=max_bead_radius,
             low_edge_quantile=low_edge_quantile,
             high_edge_quantile=high_edge_quantile,
+            num_iter=num_iter,
+            min_roundness=min_roundness,
             roi_length=roi_length,
             search_channel=search_channel,
         )
@@ -773,9 +747,10 @@ def find_circles(
     num_iter: int,
     min_radius: int,
     max_radius: int,
-    min_perimeter_fill: float,
+    min_roundness: float,
     min_dist: int,
 ):
+    # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
     img = cv.GaussianBlur(img, (5, 5), 0)
 
@@ -793,7 +768,7 @@ def find_circles(
     edges[edges != 0] = 1
 
     # Step 3: Use edges to find candidate circles.
-    circles = get_candidate_circles(edges, grid_length, num_iter)
+    circles = candidate_circles(edges, grid_length, num_iter)
 
     # Step 4: Filter circles based on size and position.
     # Remove circles that are too small or large.
@@ -808,9 +783,12 @@ def find_circles(
         & (circles[:, 1] - circles[:, 2] < img.shape[1])
     ]
 
-    # Step 5: Filter circles with low number of edges on their circumference.
-    # Pad the edges to avoid boundary cases where circle are partially off the image.
+    # Step 5: Filter circles with low number of edges on their circumference
+    # or whose gradients don't point toward the center.
+    thetas = np.arctan2(dy, dx)
+    # Pad the gradient angles and edges to avoid boundary cases.
     pad = 2 * max_radius
+    thetas = np.pad(thetas, pad)
     edges = np.pad(edges, pad)
     # Adjust circle coordinates to account for padding.
     circles[:, :2] += pad
@@ -821,26 +799,73 @@ def find_circles(
     start = 0
     scores = []
     for radius in range(min_radius, max_radius + 1):
-        perimeter = utils.circle(
-            2 * radius + 1, row=radius, col=radius, radius=radius, thickness=1, value=1
-        )
-        perimeter_coords = np.column_stack(np.where(perimeter)).astype(np.int32)
-        # Move the circle indices to be centered at (0,0).
-        perimeter_coords -= radius
+        perimeter_coords = circle_points(radius)
         end = np.searchsorted(circles[:, 2], radius + 1)
-        counts = count_perimeter(edges, circles[start:end, :2], perimeter_coords)
-        scores.append(counts / len(perimeter_coords))
+        s = mean_grad(thetas, edges, circles[start:end, :2], perimeter_coords)
+        scores.append(s / len(perimeter_coords))
         start = end
     circles[:, :2] -= pad
     scores = np.concatenate(scores)
-    circles = circles[scores >= min_perimeter_fill]
+    circles = circles[scores >= min_roundness]
+    scores = scores[scores >= min_roundness]
 
     # Step 6: Remove duplicate circles that are too close to each other.
+    perm = np.argsort(-scores)
+    circles = filter_neighbors(circles[perm], min_dist)
+
     return circles
 
 
 @numba.njit(parallel=True)
-def get_candidate_circles(edges, grid_length, num_iter):
+def mean_grad(thetas, edges, circles, perimeter_coords):
+    # TODO: Make this function nicer.
+    means = np.empty(len(circles), dtype=np.float32)
+    c = np.arctan2(perimeter_coords[:, 0], perimeter_coords[:, 1])
+    for i in prange(len(circles)):
+        row = perimeter_coords[:, 0] + circles[i, 0]
+        col = perimeter_coords[:, 1] + circles[i, 1]
+        m = 0
+        for j in prange(len(row)):
+            t = thetas[row[j], col[j]]
+            e = edges[row[j], col[j]]
+            if e > 0:
+                d = np.abs(t - c[j])
+                if d > np.pi:
+                    d = d - np.pi
+                m += 4 * np.abs(d - np.pi / 2) / np.pi - 1
+        means[i] = m
+
+    return means
+
+
+@numba.njit  # (parallel=True)
+def filter_neighbors(circles, min_dist):
+    # TODO: Make this function nicer.
+    coords = circle_points(min_dist, four_connected=True)
+
+    pad = 2 * min_dist + 1
+    arr = -np.ones((circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32)
+    valid = np.ones(len(circles), dtype=np.bool_)
+    for i in range(len(circles)):
+        for j in prange(len(coords)):
+            row = coords[j, 0] + circles[i, 0] + pad
+            col = coords[j, 1] + circles[i, 1] + pad
+            v = arr[row, col]
+            if v != -1:
+                valid[i] = False
+                break
+        if not valid[i]:
+            continue
+        for j in prange(len(coords)):
+            row = coords[j, 0] + circles[i, 0] + pad
+            col = coords[j, 1] + circles[i, 1] + pad
+            arr[row, col] = i
+
+    return circles[valid]
+
+
+@numba.njit(parallel=True)
+def candidate_circles(edges, grid_length, num_iter):
     # Find the coordinates of all edges.
     coords = np.column_stack(np.where(edges))
 
@@ -921,15 +946,81 @@ def grid_array(arr, grid_length):
     return grid_coords, grid_starts, grid_counts
 
 
-@numba.njit(parallel=True)
-def count_perimeter(edges, circles, perimeter_coords):
-    counts = np.empty(len(circles), dtype=np.float32)
-    for i in prange(len(circles)):
-        row = perimeter_coords[:, 0] + circles[i, 0]
-        col = perimeter_coords[:, 1] + circles[i, 1]
-        c = 0
-        for j in prange(len(row)):
-            c += edges[row[j], col[j]]
-        counts[i] = c
+@numba.njit
+def circle_labels(circles, num_rows, num_cols):
+    labels = -1 * np.ones((num_rows, num_cols), dtype=np.int32)
 
-    return counts
+    for i in range(len(circles)):
+        pts = filled_circle_points(circles[i, 2])
+        pts += circles[i, :2]
+        for j in prange(len(pts)):
+            r, c = pts[j]
+            if r >= 0 and r < num_rows and c >= 0 and c < num_cols:
+                if labels[r, c] != -1:
+                    labels[r, c] = -2
+                else:
+                    labels[r, c] = i
+
+    return labels
+
+
+@numba.njit
+def filled_circle_points(r):
+    size = 2 * r + 1
+    arr = np.zeros((size, size), dtype=np.uint8)
+    pts = np.zeros((size**2, 2), dtype=np.int32)
+    perimeter = circle_points(r)
+    n = len(perimeter)
+    pts[:n] = perimeter
+
+    for i in range(n):
+        arr[pts[i, 0] + r, pts[i, 1] + r] = 1
+
+    for i in range(0, 2 * r + 1):
+        j = 0
+        while not arr[i, j]:
+            j += 1
+        while arr[i, j]:
+            j += 1
+        if j <= r:
+            while not arr[i, j]:
+                pts[n, 0] = i - r
+                pts[n, 1] = j - r
+                n += 1
+                j += 1
+
+    return pts[:n]
+
+
+@numba.njit
+def circle_points(r, four_connected=False):
+    # Draw a circle using the Breseham circle algorithm
+    # see: https://funloop.org/post/2021-03-15-bresenham-circle-drawing-algorithm.html
+    points = np.zeros((20 * r, 2), dtype=np.int32)
+    x = 0
+    y = -r
+    # Draw the first 4 points that lie on the quadrants.
+    points[:4] = np.array([[0, -r], [-r, 0], [0, r], [r, 0]], dtype=np.int32)
+    x += 1
+    n = 4
+    while x < -y:
+        # Make use of the 8-way symmetry of the circle.
+        points[n : n + 8] = np.array(
+            [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]], dtype=np.int32
+        )
+        n += 8
+        # Test if we're currently inside or outside the circle.
+        if x**2 + y**2 - r**2 <= 0:
+            # We're inside so move right.
+            x += 1
+        else:
+            # We're outside so move up.
+            y += 1
+            if not four_connected:
+                # If we don't require 4-connected pixels then we can move diagonally.
+                x += 1
+
+    if y == -x:
+        points[n : n + 4] = np.array([[x, y], [-x, -y], [-x, y], [x, -y]], dtype=np.int32)
+        n += 4
+    return points[:n]

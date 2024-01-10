@@ -18,9 +18,11 @@ def to_uint8(arr: np.ndarray) -> np.ndarray:
     return arr.astype(np.uint8)
 
 
-def circle(image_length: int, row: int, col: int, radius: int, value: Any = 1.0) -> np.ndarray:
+def circle(
+    image_length: int, row: int, col: int, radius: int, value: Any = 1, thickness: int = -1
+) -> np.ndarray:
     image = np.zeros((image_length, image_length), dtype=np.uint8)
-    cv.circle(image, (col, row), radius, 1, -1)
+    cv.circle(image, (col, row), radius, 1, thickness=thickness)
     image = image.astype(type(value)) * value
     return image
 
