@@ -5,7 +5,6 @@ import logging
 
 from numba import prange
 from numpy.typing import ArrayLike
-from skimage.segmentation import random_walker
 import cv2 as cv
 import dask.array as da
 import numba
