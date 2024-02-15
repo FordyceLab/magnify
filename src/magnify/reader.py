@@ -53,6 +53,13 @@ class Reader:
                     for k, v in path_dict.items()
                     if k[0] == assay_name
                 }
+
+                first_path = next(iter(assay_dict.values()))
+                if len(assay_dict) == 1 and os.path.isdir(first_path):
+                    # The only time we should have a directory is when we have a zarr array.
+                    yield xr.open_zarr(first_path)
+                    continue
+
                 # Use these variables within the loop so we don't affect other assays.
                 channel_coords = channels
                 time_coords = times
@@ -85,7 +92,7 @@ class Reader:
                     channel_coords = channel_idxs
 
                 # Read in a single image to get the metadata stored within the file.
-                with tifffile.TiffFile(next(iter(assay_dict.values()))) as tif:
+                with tifffile.TiffFile(first_path) as tif:
                     dtype = tif.series[0].dtype
                     inner_shape = tif.series[0].shape
                     page_shape = tif.pages[0].shape
