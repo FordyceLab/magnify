@@ -11,10 +11,10 @@ import magnify.registry as registry
 
 @registry.component("flatfield_correct")
 def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
-    if isinstance(flatfield, str):
+    if isinstance(flatfield, os.PathLike):
         with tifffile.TiffFile(os.path.expanduser(flatfield)) as tif:
             flatfield = tif.asarray()
-    if isinstance(darkfield, str):
+    if isinstance(darkfield, os.PathLike):
         with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
             darkfield = tif.asarray()
 
