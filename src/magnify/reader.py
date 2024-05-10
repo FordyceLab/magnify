@@ -32,7 +32,7 @@ class Reader:
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
-        if isinstance(data, os.PathLike):
+        if isinstance(data, os.PathLike) or isinstance(data, str):
             data = [data]
 
         for d in data:
