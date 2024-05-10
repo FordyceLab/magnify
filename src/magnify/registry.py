@@ -29,6 +29,23 @@ def component(name):
     return component_decorator
 
 
+def mini_chip(**kwargs):
+    # Button centers are apart 375um vertically and 655um horizontally.
+    # Assuming a 4x objective and 1x1 binning each pixel is 1.61um.
+    defaults = confection.Config(dict(row_dist=425 / 1.61, col_dist=375 / 1.61))
+    config = defaults.merge(confection.Config(kwargs))
+    pipe = Pipeline("read", config=config)
+    pipe.add_pipe("identify_buttons")
+    pipe.add_pipe("stitch")
+    pipe.add_pipe("find_buttons")
+    pipe.add_pipe("filter_expression")
+    pipe.add_pipe("filter_nonround")
+    pipe.add_pipe("filter_leaky")
+    pipe.add_pipe("drop")
+
+    return pipe
+
+
 def ps_chip(**kwargs):
     # Button centers are apart 375um vertically and 655um horizontally.
     # Assuming a 4x objective and 2x2 binning each pixel is 3.22um.
