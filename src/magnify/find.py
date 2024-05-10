@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import logging
 
 from numba import prange
 from numpy.typing import ArrayLike
@@ -14,10 +13,9 @@ import sklearn.mixture
 import tqdm
 import xarray as xr
 
+from magnify import logger
 from magnify import utils
 import magnify.registry as registry
-
-logger = logging.getLogger(__name__)
 
 
 class ButtonFinder:
@@ -27,8 +25,10 @@ class ButtonFinder:
         col_dist: float = 655 / 3.22,
         min_button_radius: int = 4,
         max_button_radius: int = 15,
-        min_contrast: int | None = None,
-        min_roundness: float = 0.75,
+        low_edge_quantile: float = 0.1,
+        high_edge_quantile: float = 0.9,
+        num_iter: int = 5000000,
+        min_roundness: float = 0.2,
         cluster_penalty: float = 50,
         roi_length: int = 61,
         progress_bar: bool = False,
@@ -39,13 +39,15 @@ class ButtonFinder:
         self.col_dist = col_dist
         self.min_button_radius = min_button_radius
         self.max_button_radius = max_button_radius
+        self.low_edge_quantile = low_edge_quantile
+        self.high_edge_quantile = high_edge_quantile
+        self.num_iter = num_iter
         self.min_roundness = min_roundness
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
-        self.min_contrast = min_contrast
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
@@ -199,39 +201,23 @@ class ButtonFinder:
             # Certain opencv functions require an odd blocksize.
             min_button_dist -= 1
         for image in images:
-            image_max = image.max().item()
             image = utils.to_uint8(image.to_numpy())
             # Step 1: Find an imperfect button mask by thresholding.
-            blur = cv.medianBlur(image, 2 * min_button_dist + 1)
-            if self.min_contrast is None:
-                # Guess a reasonable threshold for buttons.
-                num_points = (assay.tag != "").sum()
-                q = np.pi * self.max_button_radius**2 * num_points / image.size
-                thresh = np.quantile(np.maximum(image.astype(np.int16) - blur, 0), 1 - 2 * q)
-            else:
-                thresh = 255 * self.min_contrast / image_max
-            mask = utils.to_uint8(image > blur + thresh)
+            new_points = find_circles(
+                image,
+                low_edge_quantile=self.low_edge_quantile,
+                high_edge_quantile=self.high_edge_quantile,
+                grid_length=20,
+                num_iter=self.num_iter,
+                min_radius=self.min_button_radius,
+                max_radius=self.max_button_radius,
+                min_dist=min_button_dist,
+                min_roundness=self.min_roundness,
+            )[:, :2]
+            import matplotlib.pyplot as plt
+            plt.imshow(image)
+            plt.scatter(new_points[:, 1], new_points[:, 0], c="r")
 
-            # Step 2: Find connected components and filter out points.
-            _, _, stats, new_points = cv.connectedComponentsWithStats(mask, connectivity=4)
-
-            # Ignore the background point.
-            new_points = new_points[1:]
-            stats = stats[1:]
-
-            # Exclude large and small blobs.
-            new_points = new_points[
-                (stats[:, cv.CC_STAT_HEIGHT] <= 2 * self.max_button_radius)
-                & (stats[:, cv.CC_STAT_WIDTH] <= 2 * self.max_button_radius)
-                & (stats[:, cv.CC_STAT_AREA] <= np.pi * self.max_button_radius**2)
-                & (stats[:, cv.CC_STAT_HEIGHT] >= 2 * self.min_button_radius)
-                & (stats[:, cv.CC_STAT_WIDTH] >= 2 * self.min_button_radius)
-                & (stats[:, cv.CC_STAT_AREA] >= np.pi * self.min_button_radius**2)
-            ]
-            # Remove points too close to other points in this channel.
-            dist_matrix = np.linalg.norm(new_points[np.newaxis] - new_points[:, np.newaxis], axis=2)
-            dist_matrix[np.diag_indices(len(dist_matrix))] = np.inf
-            new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
             if len(points) > 0:
                 # Remove points too close to other points in previous channels.
                 dist_matrix = np.linalg.norm(points[np.newaxis] - new_points[:, np.newaxis], axis=2)
@@ -241,8 +227,8 @@ class ButtonFinder:
             points = np.concatenate([points, new_points])
 
         # Split the points into x and y components.
-        x = points[:, 0]
-        y = points[:, 1]
+        x = points[:, 1]
+        y = points[:, 0]
 
         # Step 3: Cluster the points into distinct rows and columns.
         points_per_row = (assay.tag != "").sum(dim="mark_col").to_numpy()
@@ -329,13 +315,9 @@ class ButtonFinder:
                         subimage = roi[i, j, channel]
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
-                        if self.min_contrast is None:
-                            _, mask = cv.threshold(
-                                subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
-                            )
-                        else:
-                            thresh = 255 * self.min_contrast / roi[i, j, channel].max()
-                            mask = utils.to_uint8(subimage > thresh)
+                        _, mask = cv.threshold(
+                            subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
+                        )
 
                         contours, hierarchy = cv.findContours(
                             mask, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE
@@ -440,8 +422,10 @@ class ButtonFinder:
         col_dist: float = 655 / 3.22,
         min_button_radius: int = 4,
         max_button_radius: int = 15,
-        min_contrast: int | None = None,
-        min_roundness: float = 0.75,
+        low_edge_quantile: float = 0.1,
+        high_edge_quantile: float = 0.9,
+        num_iter: int = 5000000,
+        min_roundness: float = 0.2,
         cluster_penalty: float = 50,
         roi_length: int = 61,
         progress_bar: bool = False,
@@ -453,7 +437,9 @@ class ButtonFinder:
             col_dist=col_dist,
             min_button_radius=min_button_radius,
             max_button_radius=max_button_radius,
-            min_contrast=min_contrast,
+            low_edge_quantile=low_edge_quantile,
+            high_edge_quantile=high_edge_quantile,
+            num_iter=num_iter,
             min_roundness=min_roundness,
             cluster_penalty=cluster_penalty,
             roi_length=roi_length,
@@ -752,19 +738,24 @@ def find_circles(
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
     img = cv.GaussianBlur(img, (5, 5), 0)
+    logger.debug("Blurred Image", img)
 
     # Step 2: Find edges from image gradients.
     dx = cv.Scharr(img, ddepth=cv.CV_32F, dx=1, dy=0)
     dy = cv.Scharr(img, ddepth=cv.CV_32F, dx=0, dy=1)
     grad = np.sqrt(dx**2 + dy**2)
+    logger.debug("Gradient Magnitudes", grad)
+    low_thresh = np.quantile(grad, low_edge_quantile)
+    high_thresh = np.quantile(grad, high_edge_quantile)
     edges = cv.Canny(
         dx.astype(np.int16),
         dy.astype(np.int16),
-        threshold1=np.quantile(grad, low_edge_quantile),
-        threshold2=np.quantile(grad, high_edge_quantile),
+        threshold1=low_thresh,
+        threshold2=high_thresh,
         L2gradient=True,
     )
     edges[edges != 0] = 1
+    logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
 
     # Step 3: Use edges to find candidate circles.
     circles = candidate_circles(edges, grid_length, num_iter)
