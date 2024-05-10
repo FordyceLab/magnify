@@ -9,21 +9,28 @@ import magnify.registry as registry
 
 
 @registry.component("identify_buttons")
-def identify_buttons(assay, pinlist, blank=None):
+def identify_buttons(assay, shape=None, pinlist=None, blank=None):
     if blank is None:
         blank = ["", "blank", "BLANK"]
 
-    df = pd.read_csv(pinlist)
-    df["Indices"] = df["Indices"].apply(
-        lambda s: [int(x) for x in re.sub(r"[\(\)]", "", s).split(",")]
-    )
-    # Replace blanks with the empty string.
-    df["MutantID"] = df["MutantID"].replace(blank, "")
-    # Zero-index the indices.
-    cols, rows = np.array(df["Indices"].to_list()).T - 1
-    names = df["MutantID"].to_numpy(dtype=str, na_value="")
-    names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
-    names_array[rows, cols] = names
+    if pinlist is not None:
+        df = pd.read_csv(pinlist)
+        df["Indices"] = df["Indices"].apply(
+            lambda s: [int(x) for x in re.sub(r"[\(\)]", "", s).split(",")]
+        )
+        # Replace blanks with the empty string.
+        df["MutantID"] = df["MutantID"].replace(blank, "")
+        # Zero-index the indices.
+        cols, rows = np.array(df["Indices"].to_list()).T - 1
+        names = df["MutantID"].to_numpy(dtype=str, na_value="")
+        names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
+        names_array[rows, cols] = names
+    elif shape is not None:
+        names_array = np.empty((shape[0], shape[1]), dtype=str)
+        names_array.fill("default")
+    else:
+        raise ValueError("Either pinlist or shape must be provided.")
+
     assay = assay.assign_coords(
         tag=(("mark_row", "mark_col"), names_array),
         valid=(
@@ -31,6 +38,7 @@ def identify_buttons(assay, pinlist, blank=None):
             np.ones((names_array.shape[0], names_array.shape[1], assay.sizes["time"]), dtype=bool),
         ),
     )
+
     return assay
 
 
@@ -89,7 +97,7 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     def loss(theta):
         A = theta[: num_lns - 1]
         p = theta[num_lns - 1 :]
-        eps = 1e-8
+        eps = 1e-6
         dist = np.linalg.norm((A * code_ratios + p)[np.newaxis] - X_r[:, np.newaxis], axis=-1)
         # Logsumexp is a smooth approximation to the max function when eps is small.
         return -eps * np.sum(scipy.special.logsumexp(-dist / eps, axis=-1)) / len(X_r)
@@ -117,7 +125,6 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     ).x
     A = theta[: num_lns - 1]
     p = theta[num_lns - 1 :]
-
     # Cluster points to the closest code.
     tag_idxs = np.argmin(
         np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
@@ -125,7 +132,7 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
 
     # Change the number of codes to be the number of clusters we found.
     nonzero_tags, counts = np.unique(tag_idxs, return_counts=True)
-    nonzero_tags = nonzero_tags[counts >= 5]
+    nonzero_tags = nonzero_tags[counts > 0]
     num_codes = len(nonzero_tags)
 
     # Step 4: Perform a better clustering using a Gaussian mixture model initialized with the
