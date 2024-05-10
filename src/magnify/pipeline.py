@@ -1,10 +1,12 @@
 from __future__ import annotations
+import logging
 from typing import Callable, Sequence
 
 import confection
 from numpy.typing import ArrayLike
 import xarray as xr
 
+import magnify.logger as logger
 import magnify.registry as registry
 import magnify.utils as utils
 
@@ -14,6 +16,11 @@ class Pipeline:
         self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(reader)()
         self.config = confection.Config(config)
         self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
+
+        if "debug" in self.config and self.config["debug"] == True:
+            logger.log_level = logging.DEBUG
+        else:
+            logger.log_level = logging.INFO
 
     def __call__(
         self,
