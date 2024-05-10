@@ -214,9 +214,6 @@ class ButtonFinder:
                 min_dist=min_button_dist,
                 min_roundness=self.min_roundness,
             )[:, :2]
-            import matplotlib.pyplot as plt
-            plt.imshow(image)
-            plt.scatter(new_points[:, 1], new_points[:, 0], c="r")
 
             if len(points) > 0:
                 # Remove points too close to other points in previous channels.
