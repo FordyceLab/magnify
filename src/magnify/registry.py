@@ -37,6 +37,7 @@ def mini_chip(**kwargs):
     pipe = Pipeline("read", config=config)
     pipe.add_pipe("identify_buttons")
     pipe.add_pipe("stitch")
+    pipe.add_pipe("rotate")
     pipe.add_pipe("find_buttons")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
@@ -56,6 +57,7 @@ def ps_chip(**kwargs):
     pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("horizontal_flip")
+    pipe.add_pipe("rotate")
     pipe.add_pipe("find_buttons")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
@@ -75,6 +77,7 @@ def pc_chip(**kwargs):
     pipe.add_pipe("horizontal_flip")
     pipe.add_pipe("stitch")
     pipe.add_pipe("horizontal_flip")
+    pipe.add_pipe("rotate")
     pipe.add_pipe("find_buttons")
     pipe.add_pipe("filter_expression")
     pipe.add_pipe("filter_nonround")
@@ -108,5 +111,6 @@ def beads(**kwargs):
 def image(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("stitch")
+    pipe.add_pipe("rotate")
     pipe.add_pipe("drop")
     return pipe

@@ -16,6 +16,7 @@ scipy = "^1.9.0"
 pandas = "^2.0.3"
 plotly = "^5.18.0"
 tifffile = ">=2021.11.2"
+dask_image = ">=2024.5.3"
 tqdm = "^4.64"
 types-tqdm = "^4.64"
 xarray = {extras = ["io"], version = ">=2023.01.0"}
