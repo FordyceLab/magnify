@@ -213,7 +213,7 @@ class ButtonFinder:
                 max_radius=self.max_button_radius,
                 min_dist=min_button_dist,
                 min_roundness=self.min_roundness,
-            )[:, :2]
+            )[0][:, :2]
 
             if len(points) > 0:
                 # Remove points too close to other points in previous channels.
@@ -303,55 +303,36 @@ class ButtonFinder:
                 )
                 roi[i, j] = images[..., top:bottom, left:right]
 
-                best_subimage = None
-                best_contour = None
-                best_roundness = 0
+                best_circle = None
+                best_score = -np.inf
                 # Refine our button estimate unless we have a blank chamber.
                 if tag[i, j] != "":
                     for channel in search_channel_idxs:
                         subimage = roi[i, j, channel]
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
-                        _, mask = cv.threshold(
-                            subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
+                        find_circles
+                        print(1 - self.min_button_radius * 2 * np.pi / self.roi_length ** 2)
+                        circles, scores = new_points = find_circles(
+                            subimage,
+                            low_edge_quantile=self.low_edge_quantile,
+                            high_edge_quantile=(1 - self.min_button_radius * 2 * np.pi / self.roi_length ** 2),
+                            grid_length=20,
+                            num_iter=self.num_iter // (num_rows * num_cols),
+                            min_radius=self.min_button_radius,
+                            max_radius=self.max_button_radius,
+                            min_dist=0,
+                            min_roundness=self.min_roundness,
                         )
-
-                        contours, hierarchy = cv.findContours(
-                            mask, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE
-                        )
-                        hierarchy = hierarchy[0]
-                        for c, h in zip(contours, hierarchy):
-                            # Don't consider holes.
-                            if h[3] == 0:
-                                continue
-                            perimeter = cv.arcLength(c, True)
-                            area = cv.contourArea(c)
-                            if h[2] != -1:
-                                area -= cv.contourArea(contours[h[2]])
-                                # Save the contour of the hole too.
-                                c = [c, contours[h[2]]]
-                            else:
-                                # Save contour as element of a list for consistency.
-                                c = [c]
-                            # Don't consider contours that are the wrong size.
-                            if (
-                                perimeter <= 2 * np.pi * self.min_button_radius
-                                or perimeter >= 2 * np.pi * self.max_button_radius
-                                or area <= np.pi * self.min_button_radius**2
-                                or area >= np.pi * self.max_button_radius**2
-                            ):
-                                continue
-                            # Save this contour if it's the roundest one.
-                            roundness = 4 * np.pi * area / perimeter**2
-                            if roundness > best_roundness and roundness > self.min_roundness:
-                                best_roundness = roundness
-                                best_contour = c
-                                best_subimage = subimage
+                        if len(circles) > 0:
+                            idx = np.argmax(scores)
+                            if scores[idx] > best_score:
+                                best_circle = circles[idx]
+                                best_score = scores[idx]
 
                 # Update our estimate of the button position if we found some circles.
-                if best_contour is not None:
-                    y[i, j], x[i, j] = utils.contour_center(best_contour[0])
-                    # Refine the background by removing bright areas.
+                if best_circle is not None:
+                    y[i, j], x[i, j] = best_circle[:2]
                     # Change coordinates from roi to image coordinates.
                     x[i, j] += left
                     y[i, j] += top
@@ -366,10 +347,6 @@ class ButtonFinder:
                         assay.sizes["im_y"],
                     )
                     roi[i, j] = images[..., top:bottom, left:right]
-                    # Move contour coordinates to new centers.
-                    for c in best_contour:
-                        c[:, :, 0] += old_left - left
-                        c[:, :, 1] += old_top - top
 
                 x_rel = round(x[i, j]) - left
                 y_rel = round(y[i, j]) - top
@@ -384,29 +361,13 @@ class ButtonFinder:
                     value=1,
                 )
 
-                if best_contour is not None:
-                    fg_mask = np.zeros(fg.shape[-2:], dtype=np.uint8)
-                    cv.drawContours(fg_mask, best_contour, -1, 1, cv.FILLED)
-                    # Refine the background by removing bright areas.
-                    _, bright_mask = cv.threshold(
-                        best_subimage, thresh=0, maxval=1, type=cv.THRESH_BINARY + cv.THRESH_OTSU
-                    )
-                    dim_mask = 1 - cv.dilate(
-                        bright_mask, np.ones((self.max_button_radius, self.max_button_radius))
-                    )
-                    if np.any(bg_mask * dim_mask):
-                        bg_mask *= dim_mask
-                    valid[i, j] = True
-                else:
-                    # If we didn't find a suitable foreground just set it to be a large circle.
-                    fg_mask = utils.circle(
-                        self.roi_length,
-                        row=y_rel,
-                        col=x_rel,
-                        radius=self.max_button_radius,
-                        value=1,
-                    )
-                    valid[i, j] = False
+                fg_mask = utils.circle(
+                    self.roi_length,
+                    row=y_rel,
+                    col=x_rel,
+                    radius=best_circle[2] if best_circle is not None else self.max_button_radius,
+                    value=1,
+                )
 
                 fg[i, j] = fg_mask
                 bg[i, j] = bg_mask
@@ -485,7 +446,7 @@ class BeadFinder:
                     max_radius=self.max_bead_radius,
                     min_dist=2 * self.min_bead_radius,
                     min_roundness=self.min_roundness,
-                )
+                )[0]
                 if len(beads) > 0:
                     # Exclude beads that we've already seen.
                     duplicates = np.array(
@@ -798,9 +759,10 @@ def find_circles(
 
     # Step 6: Remove duplicate circles that are too close to each other.
     perm = np.argsort(-scores)
-    circles = filter_neighbors(circles[perm], min_dist)
+    if min_dist > 0:
+        circles = filter_neighbors(circles[perm], min_dist)
 
-    return circles
+    return circles, scores
 
 
 @numba.njit(parallel=True)
