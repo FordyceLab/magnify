@@ -312,11 +312,12 @@ class ButtonFinder:
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
                         find_circles
-                        print(1 - self.min_button_radius * 2 * np.pi / self.roi_length ** 2)
                         circles, scores = new_points = find_circles(
                             subimage,
                             low_edge_quantile=self.low_edge_quantile,
-                            high_edge_quantile=(1 - self.min_button_radius * 2 * np.pi / self.roi_length ** 2),
+                            high_edge_quantile=(
+                                1 - np.pi * self.min_button_radius / self.roi_length**2
+                            ),
                             grid_length=20,
                             num_iter=self.num_iter // (num_rows * num_cols),
                             min_radius=self.min_button_radius,
@@ -325,6 +326,7 @@ class ButtonFinder:
                             min_roundness=self.min_roundness,
                         )
                         if len(circles) > 0:
+                            scores = scores
                             idx = np.argmax(scores)
                             if scores[idx] > best_score:
                                 best_circle = circles[idx]
@@ -365,7 +367,7 @@ class ButtonFinder:
                     self.roi_length,
                     row=y_rel,
                     col=x_rel,
-                    radius=best_circle[2] if best_circle is not None else self.max_button_radius,
+                    radius=self.max_button_radius,
                     value=1,
                 )
 
