@@ -68,8 +68,8 @@ class ButtonFinder:
             (
                 num_rows,
                 num_cols,
-                assay.dims["channel"],
-                assay.dims["time"],
+                assay.sizes["channel"],
+                assay.sizes["time"],
                 self.roi_length,
                 self.roi_length,
             ),
@@ -101,11 +101,11 @@ class ButtonFinder:
             ),
             x=(
                 ("mark_row", "mark_col", "time"),
-                np.empty((num_rows, num_cols, assay.dims["time"])),
+                np.empty((num_rows, num_cols, assay.sizes["time"])),
             ),
             y=(
                 ("mark_row", "mark_col", "time"),
-                np.empty((num_rows, num_cols, assay.dims["time"])),
+                np.empty((num_rows, num_cols, assay.sizes["time"])),
             ),
         )
 
@@ -177,15 +177,15 @@ class ButtonFinder:
         assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose("mark", ...)
         # Rechunk the array to chunk along markers since users will usually want to slice along that dimension.
         mark_chunk_size = min(
-            math.ceil(chunk_bytes / (roi_bytes * assay.dims["time"] * assay.dims["channel"])),
+            math.ceil(chunk_bytes / (roi_bytes * assay.sizes["time"] * assay.sizes["channel"])),
             num_rows,
         )
         chunk_sizes = [
             mark_chunk_size,
-            assay.dims["channel"],
-            assay.dims["time"],
-            assay.dims["roi_y"],
-            assay.dims["roi_x"],
+            assay.sizes["channel"],
+            assay.sizes["time"],
+            assay.sizes["roi_y"],
+            assay.sizes["roi_x"],
         ]
         # Eagerly compute the rechunking to prevent delays.
         assay["roi"] = assay.roi.chunk(chunk_sizes).persist()
@@ -472,8 +472,8 @@ class BeadFinder:
         roi = da.empty(
             (
                 num_beads,
-                assay.dims["channel"],
-                assay.dims["time"],
+                assay.sizes["channel"],
+                assay.sizes["time"],
                 self.roi_length,
                 self.roi_length,
             ),
@@ -481,12 +481,12 @@ class BeadFinder:
             chunks=(
                 min(
                     math.ceil(
-                        chunk_bytes / (roi_bytes * assay.dims["channel"] * assay.dims["time"])
+                        chunk_bytes / (roi_bytes * assay.sizes["channel"] * assay.sizes["time"])
                     ),
                     num_beads,
                 ),
-                assay.dims["channel"],
-                assay.dims["time"],
+                assay.sizes["channel"],
+                assay.sizes["time"],
                 self.roi_length,
                 self.roi_length,
             ),
@@ -504,11 +504,11 @@ class BeadFinder:
             ),
             x=(
                 ("mark", "time"),
-                np.repeat(beads[:, np.newaxis, 1], assay.dims["time"], axis=1),
+                np.repeat(beads[:, np.newaxis, 1], assay.sizes["time"], axis=1),
             ),
             y=(
                 ("mark", "time"),
-                np.repeat(beads[:, np.newaxis, 0], assay.dims["time"], axis=1),
+                np.repeat(beads[:, np.newaxis, 0], assay.sizes["time"], axis=1),
             ),
         )
 
