@@ -12,11 +12,9 @@ import magnify.registry as registry
 
 @registry.component("rotate")
 def rotate(assay: xr.Dataset, rotation=0):
-    print(assay["image"])
-    assay["image"].data = dask_image.ndinterp.rotate(assay.image.data, rotation, axes=(-1, -2), reshape=False)
-    import matplotlib.pyplot as plt
-    print(assay["image"].data.dtype)
-    plt.imshow(assay["image"].to_numpy()[0, 0])
+    assay["image"].data = dask_image.ndinterp.rotate(
+        assay.image.data, rotation, axes=(-1, -2), reshape=False
+    )
     return assay
 
 
