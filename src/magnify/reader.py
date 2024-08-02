@@ -57,7 +57,9 @@ class Reader:
                 first_path = next(iter(assay_dict.values()))
                 if len(assay_dict) == 1 and os.path.isdir(first_path):
                     # The only time we should have a directory is when we have a zarr array.
-                    yield xr.open_zarr(first_path)
+                    assay = xr.open_zarr(first_path)
+                    assay = assay.drop_vars(["image", "im_x", "im_y"], errors="ignore")
+                    yield assay
                     continue
 
                 # Use these variables within the loop so we don't affect other assays.
