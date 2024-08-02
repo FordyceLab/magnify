@@ -11,7 +11,9 @@ class Stitcher:
         self.overlap = overlap
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        tiles = assay.tile[..., : -self.overlap, : -self.overlap]
+        tiles = assay.tile[
+            ..., : assay.tile.shape[-2] - self.overlap, : assay.tile.shape[-1] - self.overlap
+        ]
         # Move the time and channel axes last so we can focus on joining images.
         tiles = tiles.transpose("tile_row", "tile_col", "tile_y", "tile_x", "channel", "time")
         tiles = xr.concat(tiles, dim="tile_y")
