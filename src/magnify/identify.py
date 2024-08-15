@@ -26,7 +26,7 @@ def identify_buttons(assay, shape=None, pinlist=None, blank=None):
         names_array = np.empty((max(rows) + 1, max(cols) + 1), dtype=names.dtype)
         names_array[rows, cols] = names
     elif shape is not None:
-        names_array = np.empty((shape[0], shape[1]), dtype=str)
+        names_array = np.empty((shape[0], shape[1]), dtype="<U200")
         names_array.fill("default")
     else:
         raise ValueError("Either pinlist or shape must be provided.")
