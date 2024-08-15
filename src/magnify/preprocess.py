@@ -12,18 +12,18 @@ import magnify.registry as registry
 
 @registry.component("rotate")
 def rotate(assay: xr.Dataset, rotation=0):
-    assay["image"].data = dask_image.ndinterp.rotate(
-        assay.image.data, rotation, axes=(-1, -2), reshape=False
-    )
+    # assay["image"].data = dask_image.ndinterp.rotate(
+    #     assay.image.data, rotation, axes=(-1, -2), reshape=False
+    # )
     return assay
 
 
 @registry.component("flatfield_correct")
 def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
-    if isinstance(flatfield, os.PathLike):
+    if isinstance(flatfield, os.PathLike) or isinstance(flatfield, str):
         with tifffile.TiffFile(os.path.expanduser(flatfield)) as tif:
             flatfield = tif.asarray()
-    if isinstance(darkfield, os.PathLike):
+    if isinstance(darkfield, os.PathLike) or isinstance(darkfield, str):
         with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
             darkfield = tif.asarray()
 
