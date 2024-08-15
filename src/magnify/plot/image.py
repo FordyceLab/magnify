@@ -30,7 +30,7 @@ def roishow(
             img = mpl.colors.Normalize(vmin=zmin, vmax=zmax)(img.to_numpy())
             img = plt.get_cmap(cmap)(img)[:, :, :3]
         fig = px.imshow(img, binary_string=binary_string, binary_format=binary_format)
-        contours = get_contours(xp)
+        contours = get_contours(xp.fg)
         fig.add_trace(
             go.Scatter(
                 x=np.concatenate([c[:, 0] for c in contours]),
@@ -38,6 +38,16 @@ def roishow(
                 mode="lines",
                 showlegend=False,
                 line_color="green",
+            )
+        )
+        contours = get_contours(xp.bg)
+        fig.add_trace(
+            go.Scatter(
+                x=np.concatenate([c[:, 0] for c in contours]),
+                y=np.concatenate([c[:, 1] for c in contours]),
+                mode="lines",
+                showlegend=False,
+                line_color="red",
             )
         )
         return fig.data
@@ -89,16 +99,18 @@ def imshow(
                     contour_x = [left, left, right, right, left, None]
                     contour_y = [bottom, top, top, bottom, bottom, None]
                 elif contour_type == "fg":
-                    cont = get_contours(m)
+                    cont = get_contours(m.fg[0])
+                    if len(cont) == 0:
+                        continue
                     # Adjust contours to be in image coordinates.
                     contour_x = list(np.concatenate([c[:, 0] + left for c in cont])) + [None]
                     contour_y = list(np.concatenate([c[:, 1] + top for c in cont])) + [None]
 
                 # Get the label for the bounding box.
                 if "tag" in m.coords:
-                    label = f"{m.mark.item()}: {m.tag.item()}"
+                    label = f"{idx}: {m.tag.item()}"
                 else:
-                    label = str(m.mark.item())
+                    label = str(idx)
                 if m.valid.item():
                     valid_x += contour_x
                     valid_y += contour_y
@@ -137,9 +149,9 @@ def imshow(
     return fig
 
 
-def get_contours(roi):
+def get_contours(fg):
     contours, _ = cv.findContours(
-        roi.fg.to_numpy().astype("uint8"),
+        fg.to_numpy().astype("uint8"),
         cv.RETR_EXTERNAL,
         cv.CHAIN_APPROX_SIMPLE,
     )
