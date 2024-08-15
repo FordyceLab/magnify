@@ -196,7 +196,7 @@ class ButtonFinder:
 
     def find_centers(self, images: xr.DataArray, assay: xr.Dataset):
         points = np.empty((0, 2))
-        min_button_dist = round(min(self.row_dist, self.col_dist) / 2)
+        min_button_dist = round(min(self.row_dist, self.col_dist) / 2 - self.max_button_radius)
         if min_button_dist % 2 == 0:
             # Certain opencv functions require an odd blocksize.
             min_button_dist -= 1
