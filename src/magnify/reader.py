@@ -1,11 +1,12 @@
 from __future__ import annotations
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 import collections
 import datetime
 import fnmatch
 import functools
 import glob
 import os
+import pathlib
 import re
 
 from numpy.typing import ArrayLike
@@ -28,14 +29,16 @@ class Reader:
 
     def __call__(
         self,
-        data: ArrayLike | str,
+        data: str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset],
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
-        if isinstance(data, os.PathLike) or isinstance(data, str):
-            data = [data]
-
+        data = [data] if isinstance(data, str | xr.DataArray | xr.Dataset) else [data]
         for d in data:
+            if isinstance(d, xr.Dataset | xr.DataArray):
+                yield normalize_assay(d)
+                continue
+
             path_dict, meta_dict = extract_paths(
                 d, assay="str", channel="str", time="time", row="int", col="int"
             )
@@ -54,197 +57,15 @@ class Reader:
                     if k[0] == assay_name
                 }
 
-                first_path = next(iter(assay_dict.values()))
-                if len(assay_dict) == 1 and os.path.isdir(first_path):
+                path = pathlib.Path(next(iter(assay_dict.values())))
+                if len(assay_dict) == 1 and path.is_dir():
                     # The only time we should have a directory is when we have a zarr array.
-                    assay = xr.open_zarr(first_path)
-                    assay = assay.drop_vars(["image", "im_x", "im_y"], errors="ignore")
-                    yield assay
-                    continue
+                    assay = xr.open_zarr(path.parent, group=path.name)
+                    assay = assay.rename({path.name: "tile"})
+                else:
+                    assay = read_tiffs(assay_dict, channels=channels, times=times)
 
-                # Use these variables within the loop so we don't affect other assays.
-                channel_coords = channels
-                time_coords = times
-
-                # Get the indices specified in the path each in sorted order.
-                channel_idxs, time_idxs, row_idxs, col_idxs = (
-                    sorted(set(idx)) for idx in zip(*assay_dict.keys())
-                )
-
-                # Check which dimensions are specified in the path and compute the shape of those dimensions.
-                dims_in_path = []
-                outer_shape = tuple()
-                if channel_idxs[0] != -1:
-                    dims_in_path.append("channel")
-                    outer_shape += (len(channel_idxs),)
-                if time_idxs[0] != -1:
-                    dims_in_path.append("time")
-                    outer_shape += (len(time_idxs),)
-                if row_idxs[0] != -1:
-                    dims_in_path.append("tile_row")
-                    outer_shape += (len(row_idxs),)
-                if col_idxs[0] != -1:
-                    dims_in_path.append("tile_col")
-                    outer_shape += (len(col_idxs),)
-
-                # If the user didn't specify times or channels use the ones from the path.
-                if time_coords is None and "time" in dims_in_path:
-                    time_coords = time_idxs
-                if channel_coords is None and "channel" in dims_in_path:
-                    channel_coords = channel_idxs
-
-                # Read in a single image to get the metadata stored within the file.
-                with tifffile.TiffFile(first_path) as tif:
-                    dtype = tif.series[0].dtype
-                    inner_shape = tif.series[0].shape
-                    page_shape = tif.pages[0].shape
-
-                    letter_to_dim = {
-                        "C": "channel",
-                        "T": "time",
-                        "Z": "depth",
-                        "Y": "tile_y",
-                        "X": "tile_x",
-                        "R": "tile_pos",
-                    }
-                    dims_in_file = [letter_to_dim[c] for c in tif.series[0].axes]
-
-                    if (
-                        time_coords is None
-                        and tif.is_micromanager
-                        and "StartTime" in tif.micromanager_metadata["Summary"]
-                    ):
-                        # Get the time string without timezone info.
-                        time_str = tif.micromanager_metadata["Summary"]["StartTime"][:-6]
-                        start_time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
-                        if "time" in dims_in_file:
-                            # Only look at the first file's description since time isn't across multiple files.
-                            planes = [
-                                pl
-                                for pl in bs4.BeautifulSoup(tif.pages[0].description, "xml")
-                                .find("Image")
-                                .find_all("Plane")
-                            ]
-                            assert all(pl.get("DeltaTUnit") == "ms" for pl in planes)
-                            time_coords = [
-                                start_time
-                                + datetime.timedelta(milliseconds=float(pl.get("DeltaT")))
-                                for pl in planes
-                            ]
-                            if "channel" in dims_in_file:
-                                stride = inner_shape[dims_in_file.index("channel")]
-                            else:
-                                stride = 1
-                            assert len(time_coords) % stride == 0
-                            time_coords = time_coords[::stride]
-                        else:
-                            time_coords = [start_time]
-                    if channel_coords is None and tif.is_micromanager:
-                        channel_coords = tif.micromanager_metadata["Summary"]["ChNames"]
-
-                    if "tile_pos" in dims_in_file:
-                        # Tiles are always saved in multiple files so ignore this dimension
-                        # since the user should specify tiles in their search path.
-                        tile_idx = dims_in_file.index("tile_pos")
-                        inner_shape = inner_shape[:tile_idx] + inner_shape[tile_idx + 1 :]
-                        dims_in_file = dims_in_file[:tile_idx] + dims_in_file[tile_idx + 1 :]
-
-                    if "depth" in dims_in_file:
-                        raise ValueError("tiff files with a Z dimension are not yet supported.")
-                    if "tile_y" not in dims_in_file or "tile_x" not in dims_in_file:
-                        raise ValueError("tiff files must contain an X and Y dimension.")
-
-                # Check the dimensions specified in the path and inside the tiff file do not overlap.
-                if set(dims_in_file).intersection(dims_in_path):
-                    raise ValueError(
-                        "Dimensions specified in the path names and inside the tiff file overlap."
-                    )
-
-                # Setup a dask array to lazyload image tiles and extract attributes.
-                filenames = [x for _, x in sorted(assay_dict.items())]
-
-                def read_tile(block_id, filenames):
-                    outer_id = block_id[: len(outer_shape)]
-                    inner_id = block_id[len(outer_shape) :]
-                    if len(outer_id) > 0:
-                        file_idx = np.ravel_multi_index(outer_id, outer_shape)
-                    else:
-                        # This is the case where we don't have indices outside the file.
-                        file_idx = 0
-
-                    with tifffile.TiffFile(filenames[file_idx]) as tif:
-                        page_ndim = len(page_shape)
-                        if len(inner_shape) > page_ndim:
-                            page_idx = np.ravel_multi_index(
-                                inner_id[:-page_ndim], inner_shape[:-page_ndim]
-                            )
-                        else:
-                            # This is the case where no dimensions correspond to page dims.
-                            page_idx = 0
-                        # Read the page from disk.
-                        page = tif.pages[page_idx].asarray()
-                        # Expand the dimensions of the block to incorporate outer dims and page index dims.
-                        return np.expand_dims(page, axis=tuple(range(len(block_id) - page_ndim)))
-
-                # Chunk the images so that each chunk represents a single page in the tiff file.
-                tiles = da.map_blocks(
-                    functools.partial(read_tile, filenames=filenames),
-                    dtype=dtype,
-                    chunks=(
-                        (
-                            tuple((1,) * size for size in outer_shape)
-                            + tuple((1,) * size for size in inner_shape[: -len(page_shape)])
-                            + inner_shape[-len(page_shape) :]
-                        )
-                    ),
-                )
-
-                coords = {}
-                # Set named coordinates for channels and times if they're available.
-                if channel_coords is not None:
-                    coords["channel"] = channel_coords
-                if time_coords is not None:
-                    # Store time as seconds.
-                    coords["time"] = [int(t.timestamp()) for t in time_coords]
-
-                # Put all our data into an xarray dataset.
-                assay = xr.Dataset(
-                    {"tile": (dims_in_path + dims_in_file, tiles)},
-                    coords=coords,
-                    attrs={"name": assay_name},
-                )
-
-                # Make sure the assay always has a time and channel dimension.
-                if "channel" not in assay.dims:
-                    assay = assay.expand_dims("channel", 0)
-                if "time" not in assay.dims:
-                    assay = assay.expand_dims("time", 1)
-
-                # Reorder the dimensions so they're always consistent and add missing dimensions.
-                desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
-                for dim in desired_order:
-                    if dim not in assay.tile.dims:
-                        assay["tile"] = assay.tile.expand_dims(dim)
-
-                assay = assay.transpose(*desired_order)
-
-                # Add any metadata coordinates specified by the user.
-                for (meta_name, dim), meta_idxs_dict in meta_dict.items():
-                    if dim == "time":
-                        # Make sure we're indexing using datetimes.
-                        dim_idxs = [
-                            datetime.datetime.fromtimestamp(idx) for idx in assay[dim].values
-                        ]
-                    else:
-                        dim_idxs = assay[dim].values
-
-                    meta_idxs = [meta_idxs_dict[dim_idx] for dim_idx in dim_idxs]
-                    assay = assay.assign_coords({meta_name: (dim, meta_idxs)})
-
-                # Make sure the time dimension starts at 0 seconds.
-                assay = assay.assign_coords(time=assay.time - assay.time[0])
-
-                yield assay
+                yield normalize_assay(assay)
 
     @registry.readers.register("read")
     def make():
@@ -333,3 +154,188 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
             raise ValueError(f"{path} and {path_dict[idxs]} map to the same index.")
 
     return path_dict, meta_dict
+
+
+def read_tiffs(
+    assay_dict: dict[tuple[int, str, int, int], str],
+    channels: Sequence[str] | None,
+    times: Sequence[str] | None,
+) -> xr.Dataset:
+    # Get the indices specified in the path each in sorted order.
+    channel_idxs, time_idxs, row_idxs, col_idxs = (
+        sorted(set(idx)) for idx in zip(*assay_dict.keys())
+    )
+
+    # Check which dimensions are specified in the path and compute the shape of those dimensions.
+    dims_in_path = []
+    outer_shape = tuple()
+    if channel_idxs[0] != -1:
+        dims_in_path.append("channel")
+        outer_shape += (len(channel_idxs),)
+    if time_idxs[0] != -1:
+        dims_in_path.append("time")
+        outer_shape += (len(time_idxs),)
+    if row_idxs[0] != -1:
+        dims_in_path.append("tile_row")
+        outer_shape += (len(row_idxs),)
+    if col_idxs[0] != -1:
+        dims_in_path.append("tile_col")
+        outer_shape += (len(col_idxs),)
+
+    # If the user didn't specify times or channels use the ones from the path.
+    if times is None and "time" in dims_in_path:
+        times = time_idxs
+    if channels is None and "channel" in dims_in_path:
+        channels = channel_idxs
+
+    # Read in a single image to get the metadata stored within the file.
+    with tifffile.TiffFile(first_path) as tif:
+        dtype = tif.series[0].dtype
+        inner_shape = tif.series[0].shape
+        page_shape = tif.pages[0].shape
+
+        letter_to_dim = {
+            "C": "channel",
+            "T": "time",
+            "Z": "depth",
+            "Y": "tile_y",
+            "X": "tile_x",
+            "R": "tile_pos",
+        }
+        dims_in_file = [letter_to_dim[c] for c in tif.series[0].axes]
+
+        if (
+            times is None
+            and tif.is_micromanager
+            and "StartTime" in tif.micromanager_metadata["Summary"]
+        ):
+            # Get the time string without timezone info.
+            time_str = tif.micromanager_metadata["Summary"]["StartTime"][:-6]
+            start_time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
+            if "time" in dims_in_file:
+                # Only look at the first file's description since time isn't across multiple files.
+                planes = [
+                    pl
+                    for pl in bs4.BeautifulSoup(tif.pages[0].description, "xml")
+                    .find("Image")
+                    .find_all("Plane")
+                ]
+                assert all(pl.get("DeltaTUnit") == "ms" for pl in planes)
+                times = [
+                    start_time + datetime.timedelta(milliseconds=float(pl.get("DeltaT")))
+                    for pl in planes
+                ]
+                if "channel" in dims_in_file:
+                    stride = inner_shape[dims_in_file.index("channel")]
+                else:
+                    stride = 1
+                assert len(times) % stride == 0
+                times = times[::stride]
+            else:
+                times = [start_time]
+        if channels is None and tif.is_micromanager:
+            channels = tif.micromanager_metadata["Summary"]["ChNames"]
+
+        if "tile_pos" in dims_in_file:
+            # Tiles are always saved in multiple files so ignore this dimension
+            # since the user should specify tiles in their search path.
+            tile_idx = dims_in_file.index("tile_pos")
+            inner_shape = inner_shape[:tile_idx] + inner_shape[tile_idx + 1 :]
+            dims_in_file = dims_in_file[:tile_idx] + dims_in_file[tile_idx + 1 :]
+
+        if "depth" in dims_in_file:
+            raise ValueError("tiff files with a Z dimension are not yet supported.")
+        if "tile_y" not in dims_in_file or "tile_x" not in dims_in_file:
+            raise ValueError("tiff files must contain an X and Y dimension.")
+
+    # Check the dimensions specified in the path and inside the tiff file do not overlap.
+    if set(dims_in_file).intersection(dims_in_path):
+        raise ValueError("Dimensions specified in the path names and inside the tiff file overlap.")
+
+    # Setup a dask array to lazyload image tiles and extract attributes.
+    filenames = [x for _, x in sorted(assay_dict.items())]
+
+    def read_tile(block_id, filenames):
+        outer_id = block_id[: len(outer_shape)]
+        inner_id = block_id[len(outer_shape) :]
+        if len(outer_id) > 0:
+            file_idx = np.ravel_multi_index(outer_id, outer_shape)
+        else:
+            # This is the case where we don't have indices outside the file.
+            file_idx = 0
+
+        with tifffile.TiffFile(filenames[file_idx]) as tif:
+            page_ndim = len(page_shape)
+            if len(inner_shape) > page_ndim:
+                page_idx = np.ravel_multi_index(inner_id[:-page_ndim], inner_shape[:-page_ndim])
+            else:
+                # This is the case where no dimensions correspond to page dims.
+                page_idx = 0
+            # Read the page from disk.
+            page = tif.pages[page_idx].asarray()
+            # Expand the dimensions of the block to incorporate outer dims and page index dims.
+            return np.expand_dims(page, axis=tuple(range(len(block_id) - page_ndim)))
+
+    # Chunk the images so that each chunk represents a single page in the tiff file.
+    tiles = da.map_blocks(
+        functools.partial(read_tile, filenames=filenames),
+        dtype=dtype,
+        chunks=(
+            (
+                tuple((1,) * size for size in outer_shape)
+                + tuple((1,) * size for size in inner_shape[: -len(page_shape)])
+                + inner_shape[-len(page_shape) :]
+            )
+        ),
+    )
+
+    coords = {}
+    # Set named coordinates for channels and times if they're available.
+    if channels is not None:
+        coords["channel"] = channels
+    if times is not None:
+        # Store time as seconds.
+        coords["time"] = [int(t.timestamp()) for t in times]
+
+    # Put all our data into an xarray dataset.
+    assay = xr.Dataset(
+        {"tile": (dims_in_path + dims_in_file, tiles)},
+        coords=coords,
+        attrs={"name": assay_name},
+    )
+
+    # Add any metadata coordinates specified by the user.
+    for (meta_name, dim), meta_idxs_dict in meta_dict.items():
+        if dim == "time":
+            # Make sure we're indexing using datetimes.
+            dim_idxs = [datetime.datetime.fromtimestamp(idx) for idx in assay[dim].values]
+        else:
+            dim_idxs = assay[dim].values
+
+        meta_idxs = [meta_idxs_dict[dim_idx] for dim_idx in dim_idxs]
+        assay = assay.assign_coords({meta_name: (dim, meta_idxs)})
+
+    # Make sure the time dimension starts at 0 seconds.
+    assay = assay.assign_coords(time=assay.time - assay.time[0])
+
+    return assay
+
+
+def normalize_assay(assay: xr.Dataset | xr.DataArray) -> xr.Dataset:
+    if isinstance(assay, xr.DataArray):
+        assay = xr.Dataset({"tile": assay}).assign_attrs(assay.attrs)
+
+    # Rename dimensions since we'll be adding new arrays whose names will conflict.
+    for old_name in ["x", "y", "row", "col"]:
+        if old_name in assay.tile.dims:
+            assay = assay.rename({old_name: "tile_" + old_name})
+
+    # Reorder the dimensions so they're always consistent and add missing dimensions.
+    desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
+    for dim in desired_order:
+        if dim not in assay.tile.dims:
+            assay["tile"] = assay.tile.expand_dims(dim)
+
+    assay = assay.transpose(*desired_order)
+
+    return assay
