@@ -330,8 +330,17 @@ def normalize_assay(assay: xr.Dataset | xr.DataArray) -> xr.Dataset:
         if old_name in assay.tile.dims:
             assay = assay.rename({old_name: "tile_" + old_name})
 
-    # Reorder the dimensions so they're always consistent and add missing dimensions.
     desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
+    # If we have additional dimensions stack them all into a single time dimension.
+    extra_dims = [dim for dim in assay.tile.dims if dim not in desired_order]
+    if len(extra_dims) > 0:
+        if "time" in assay.tile.dims:
+            # Rename the time dimension to avoid conflicts.
+            assay = assay.rename(time="__time__")
+            extra_dims.append("__time__")
+        assay = assay.stack(time=extra_dims)
+
+    # Reorder the dimensions so they're always consistent and add missing dimensions.
     for dim in desired_order:
         if dim not in assay.tile.dims:
             assay["tile"] = assay.tile.expand_dims(dim)
