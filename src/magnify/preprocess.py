@@ -20,11 +20,21 @@ def rotate(assay: xr.Dataset, rotation=0):
 
 @registry.component("flatfield_correct")
 def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
-    if isinstance(flatfield, os.PathLike) or isinstance(flatfield, str):
-        with tifffile.TiffFile(os.path.expanduser(flatfield)) as tif:
-            flatfield = tif.asarray()
-    if isinstance(darkfield, os.PathLike) or isinstance(darkfield, str):
-        with tifffile.TiffFile(os.path.expanduser(darkfield)) as tif:
+    if isinstance(flatfield, os.PathLike | str):
+        flatfield = pathlib.Path(flatfield).expanduser()
+        if flatfield.is_dir():
+            flatfield = xr.dataset.open_zarr(flatfield, group="flatfield")["flatfield"]
+            flatfield = xr.align(assay.tile, flatfield, join="left")[1].fillna(
+                flatfield.sel(channel="default")
+            )
+            darkfield = xr.dataset.open_zarr(flatfield, group="darkfield")["darkfield"]
+        else:
+            with tifffile.TiffFile(flatfield) as tif:
+                flatfield = tif.asarray()
+
+    if isinstance(darkfield, os.PathLike | str):
+        darkfield = pathlib.Path(darkfield).expanduser()
+        with tifffile.TiffFile(darkfield) as tif:
             darkfield = tif.asarray()
 
     dtype = assay.tile.dtype
