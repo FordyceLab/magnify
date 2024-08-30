@@ -33,7 +33,7 @@ class Reader:
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
-        data = [data] if isinstance(data, str | xr.DataArray | xr.Dataset) else [data]
+        data = [data] if isinstance(data, str | xr.DataArray | xr.Dataset) else data
         for d in data:
             if isinstance(d, xr.Dataset | xr.DataArray):
                 yield normalize_assay(d)
