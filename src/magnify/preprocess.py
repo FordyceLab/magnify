@@ -23,7 +23,9 @@ def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
     if isinstance(flatfield, os.PathLike | str):
         flatfield = pathlib.Path(flatfield).expanduser()
         if flatfield.is_dir():
+            # We have a zarr directory with both flatfield and darkfield information.
             flatfield = xr.dataset.open_zarr(flatfield, group="flatfield")["flatfield"]
+            # Account for channel mismatches.
             flatfield = xr.align(assay.tile, flatfield, join="left")[1].fillna(
                 flatfield.sel(channel="default")
             )

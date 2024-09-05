@@ -58,10 +58,15 @@ class Reader:
                 }
 
                 path = pathlib.Path(next(iter(assay_dict.values())))
+                # The only time we should have a directory is when we have a zarr array.
                 if len(assay_dict) == 1 and path.is_dir():
-                    # The only time we should have a directory is when we have a zarr array.
-                    assay = xr.open_zarr(path.parent, group=path.name)
-                    assay = assay.rename({path.name: "tile"})
+                    if not (path / ".zattrs").is_file():
+                        # The file was written with a recent prismo version.
+                        # The last element in the path is the group directory.
+                        assay = xr.open_zarr(path.parent, group=path.name)
+                    else:
+                        # The file was writen with prismo version 0.0.1 with no groups.
+                        assay = xr.open_zarr(path)
                 else:
                     assay = read_tiffs(assay_dict, channels=channels, times=times)
 
