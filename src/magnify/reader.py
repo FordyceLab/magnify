@@ -67,8 +67,9 @@ class Reader:
                     else:
                         # The file was writen with prismo version 0.0.1 with no groups.
                         assay = xr.open_zarr(path)
+                    assay.attrs["name"] = assay_name
                 else:
-                    assay = read_tiffs(assay_dict, channels=channels, times=times)
+                    assay = read_tiffs(assay_dict, channels=channels, times=times, assay_name=assay_name, meta_dict=meta_dict)
 
                 yield normalize_assay(assay)
 
@@ -165,6 +166,8 @@ def read_tiffs(
     assay_dict: dict[tuple[int, str, int, int], str],
     channels: Sequence[str] | None,
     times: Sequence[str] | None,
+    assay_name: str,
+    meta_dict,
 ) -> xr.Dataset:
     # Get the indices specified in the path each in sorted order.
     channel_idxs, time_idxs, row_idxs, col_idxs = (
@@ -194,7 +197,7 @@ def read_tiffs(
         channels = channel_idxs
 
     # Read in a single image to get the metadata stored within the file.
-    with tifffile.TiffFile(first_path) as tif:
+    with tifffile.TiffFile(next(iter(assay_dict.values()))) as tif:
         dtype = tif.series[0].dtype
         inner_shape = tif.series[0].shape
         page_shape = tif.pages[0].shape
@@ -319,9 +322,6 @@ def read_tiffs(
 
         meta_idxs = [meta_idxs_dict[dim_idx] for dim_idx in dim_idxs]
         assay = assay.assign_coords({meta_name: (dim, meta_idxs)})
-
-    # Make sure the time dimension starts at 0 seconds.
-    assay = assay.assign_coords(time=assay.time - assay.time[0])
 
     return assay
 
