@@ -4,6 +4,7 @@ __all__ = []
 
 from magnify.file import *
 from magnify.registry import *
+import magnify.accessor
 import magnify.filter
 import magnify.find
 import magnify.identify

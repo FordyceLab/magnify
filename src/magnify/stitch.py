@@ -22,8 +22,10 @@ class Stitcher:
         images = images.rename(tile_y="im_y", tile_x="im_x")
         # Move the time and channel axes back to the front.
         images = images.transpose("channel", "time", "im_y", "im_x")
-        # Add the stitched images to the dataset.
-        assay["image"] = images
+
+        # Rechunk the array so each chunk is a single tile and cache the intermediate results.
+        assay["image"] = images.chunk((1, 1, assay.sizes["tile_y"], assay.sizes["tile_x"])).mg.cache()
+
         return assay
 
     @components.register("stitch")

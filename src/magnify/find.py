@@ -128,9 +128,9 @@ class ButtonFinder:
                 assay.valid[..., t],
             ) = self.find_rois(images, t, assay)
             # Eagerly compute the roi values so the dask task graph doesn't get too large.
-            assay["roi"] = assay.roi.persist()
-            assay["fg"] = assay.fg.persist()
-            assay["bg"] = assay.bg.persist()
+            assay["roi"] = assay.roi.mg.cache()
+            assay["fg"] = assay.fg.mg.cache()
+            assay["bg"] = assay.bg.mg.cache()
 
         # Now fill in the remaining timesteps where we aren't searching.
         for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
@@ -556,9 +556,9 @@ class BeadFinder:
                 roi[j] = image[..., top:bottom, left:right]
             assay.roi[:, i] = roi
 
-        assay["roi"] = assay.roi.persist()
-        assay["fg"] = assay.fg.persist()
-        assay["bg"] = assay.bg.persist()
+        assay["roi"] = assay.roi.mg.cache()
+        assay["fg"] = assay.fg.mg.cache()
+        assay["bg"] = assay.bg.mg.cache()
         assay = assay.assign_coords(
             valid=(
                 ("mark", "time"),
