@@ -56,9 +56,9 @@ class ButtonFinder:
         num_rows, num_cols = assay.tag.shape
 
         # Store each channel and timesteps for each marker in one chunk and set marker row/col
-        # sizes so each chunk ends up being at least 50MB. We will rechunk later.
-        chunk_bytes = 5e7
-        # Don't take into account dtype size since fg/bg bool arrays should also be 50MB.
+        # sizes so each chunk ends up being at least 1MB. We will rechunk later.
+        chunk_bytes = 1e6
+        # Don't take into account dtype size since fg/bg bool arrays should also be 1MB.
         roi_bytes = self.roi_length**2
         # Prioritize larger row chunks since we're more likely to want whole columns than rows.
         row_chunk_size = min(math.ceil(chunk_bytes / roi_bytes), num_rows)
@@ -128,9 +128,10 @@ class ButtonFinder:
                 assay.valid[..., t],
             ) = self.find_rois(images, t, assay)
             # Eagerly compute the roi values so the dask task graph doesn't get too large.
-            assay["roi"] = assay.roi.mg.cache()
-            assay["fg"] = assay.fg.mg.cache()
-            assay["bg"] = assay.bg.mg.cache()
+            # TODO: Look into caching here or storing.
+            assay["roi"] = assay.roi.mg.persist()
+            assay["fg"] = assay.fg.mg.persist()
+            assay["bg"] = assay.bg.mg.persist()
 
         # Now fill in the remaining timesteps where we aren't searching.
         for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
@@ -171,6 +172,7 @@ class ButtonFinder:
             assay.y[..., t] = y
             assay.valid[..., t] = assay.valid[..., copy_t]
             # Eagerly compute the roi values so the dask task graph doesn't get too large.
+            # TODO: Look into caching here or storing.
             assay["roi"] = assay.roi.persist()
             assay["fg"] = assay.fg.persist()
             assay["bg"] = assay.bg.persist()
@@ -188,9 +190,9 @@ class ButtonFinder:
             assay.sizes["roi_x"],
         ]
         # Eagerly compute the rechunking to prevent delays.
-        assay["roi"] = assay.roi.chunk(chunk_sizes).persist()
-        assay["fg"] = assay.fg.chunk(chunk_sizes).persist()
-        assay["bg"] = assay.bg.chunk(chunk_sizes).persist()
+        assay["roi"] = assay.roi.chunk(chunk_sizes).cache()
+        assay["fg"] = assay.fg.chunk(chunk_sizes).cache()
+        assay["bg"] = assay.bg.chunk(chunk_sizes).cache()
 
         return assay
 
@@ -464,9 +466,9 @@ class BeadFinder:
 
         num_beads = len(beads)
         # Store each channel and timesteps for each marker in one chunk and set marker row/col
-        # sizes so each chunk ends up being at least 50MB. We will rechunk later.
-        chunk_bytes = 5e7
-        # Don't take into account dtype size since fg/bg bool arrays should also be 50MB.
+        # sizes so each chunk ends up being at least 1MB.
+        chunk_bytes = 1e6
+        # Don't take into account dtype size since fg/bg bool arrays should also be 1MB.
         roi_bytes = self.roi_length**2
         # Create the array of subimage regions.
         roi = da.empty(
