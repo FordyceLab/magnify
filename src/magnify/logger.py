@@ -7,6 +7,7 @@ text_logger = logging.getLogger("magnify")
 title_logger = []
 plot_logger = []
 
+
 def debug(text, data=None):
     if log_level > logging.DEBUG:
         return
@@ -16,6 +17,7 @@ def debug(text, data=None):
     else:
         title_logger.append(text)
         plot_logger.append(data.copy())
+
 
 def warning(text, data=None):
     if log_level > logging.WARNING:
@@ -27,6 +29,7 @@ def warning(text, data=None):
         title_logger.append(text)
         plot_logger.append(data.copy())
 
+
 def figure():
     num_plots = len(plot_logger)
     fig, axs = plt.subplots(nrows=num_plots, squeeze=False, figsize=(10, 10 * num_plots))
@@ -35,5 +38,7 @@ def figure():
     for ax, title, data in zip(axs, title_logger, plot_logger):
         ax.set_title(title)
         ax.imshow(data)
+    title_logger.clear()
+    plot_logger.clear()
 
     return fig
