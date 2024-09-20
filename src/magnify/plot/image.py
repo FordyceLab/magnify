@@ -60,88 +60,60 @@ def roishow(
 
 def imshow(
     xp: xr.Dataset,
-    contour_type="roi",
-    cmap="viridis",
-    zmin=None,
-    zmax=None,
-    **kwargs,
 ):
+    settings = napari.settings.get_settings()
+    settings.appearance.layer_tooltip_visibility = True
     img = xp.image
     if "channel" in img.dims:
-        viewer = napari.imshow(img, channel_axis=img.dims.index("channel"), name=img.channel.to_numpy())[0]
+        viewer = napari.imshow(
+            img, channel_axis=img.dims.index("channel"), name=img.channel.to_numpy()
+        )[0]
     else:
         viewer = napari.imshow(img)[0]
 
     if "roi" in xp:
         roi = xp.roi.compute()
         # Initialize image metadata.
-        valid_x = []
-        valid_y = []
-        valid_labels = []
-        invalid_x = []
-        invalid_y = []
-        invalid_labels = []
-        contours = []
+        roi_contours = []
+        fg_labels = np.zeros((img.sizes["im_y"], img.sizes["im_x"]), dtype=int)
         for idx, m in roi.groupby("mark"):
             # Get the centers and the bounds of the bounding box.
             top, bottom, left, right = utils.bounding_box(
-                m.x.item(), m.y.item(), roi.sizes["roi_y"], img.shape[-1], img.shape[-2]
+                m.x.astype(int).item(),
+                m.y.astype(int).item(),
+                roi.sizes["roi_y"],
+                img.shape[-1],
+                img.shape[-2],
             )
-            # Contours are either roi bounding boxes or contours around the foreground.
-            if contour_type == "roi":
-                contour = [np.array([[top, left], [bottom, right]])]
-            elif contour_type == "fg":
-                fg = m.fg.to_numpy()
-                contour = get_contours(fg[(0,) * (fg.ndim - 2)])
-                if len(contour) == 0:
-                    continue
-                # Adjust contours to be in image coordinates.
-                for c in contour:
-                    c[:, 0] += top
-                    c[:, 1] += left
-            contours += contour
-        viewer.add_shapes(contours, shape_type="polygon" if contour_type == "fg" else "rectangle")
+            # Set the roi bounding box.
+            roi_contours.append(np.array([[top, left], [bottom, right]]))
+            # Set the foreground label in image coordinates.
+            fg = m.fg.to_numpy()
+            while fg.ndim > 2:
+                # TODO: Handle channels & time dimensions more elegantly.
+                fg = fg[0]
+            fg_labels[top:bottom, left:right] = (idx + 1) * fg + fg_labels[
+                top:bottom, left:right
+            ] * (1 - fg)
 
-        """
-        # Get the label for the bounding box.
-        if "tag" in m.coords:
-            label = f"{idx}: {m.tag.item()}"
-        else:
-            label = str(idx)
-        if m.valid.item():
-            valid_x += contour_x
-            valid_y += contour_y
-            valid_labels += [label] * len(contour_x)
-        else:
-            invalid_x += contour_x
-            invalid_y += contour_y
-            invalid_labels += [label] * len(contour_y)
-        """
+        props = {"mark": [i for i in range(xp.sizes["mark"])], "tag": list(xp.tag.to_numpy())}
+        viewer.add_labels(
+            fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
+        )
+        viewer.add_shapes(
+            roi_contours,
+            shape_type="rectangle",
+            name="roi",
+            face_color="transparent",
+            text={
+                "string": "{mark}: {tag}",
+                "size": 10,
+                "translation": [-roi.sizes["roi_y"] // 2 + 5, 0],
+                "visible": False,
+            },
+            properties=props,
+        )
 
-        """
-        fig.add_trace(
-            go.Scatter(
-                x=valid_x,
-                y=valid_y,
-                mode="lines",
-                hovertemplate="%{text}<extra></extra>",
-                text=valid_labels,
-                showlegend=False,
-                line_color="green",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=invalid_x,
-                y=invalid_y,
-                mode="lines",
-                hovertemplate="%{text}<extra></extra>",
-                text=invalid_labels,
-                showlegend=False,
-                line_color="red",
-            )
-        )
-        """
     return viewer
 
 
