@@ -1,66 +1,50 @@
 from __future__ import annotations
 
-import cv2 as cv
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+import dask.array as da
 import napari
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
 import xarray as xr
 
-from magnify.plot.ndplot import ndplot
 import magnify.utils as utils
 
 
-def roishow(
-    xp: xr.Dataset,
-    facet_col=None,
-    animation_frame=None,
-    binary_string=True,
-    binary_format="jpeg",
-    binary_compression_level=0,
-    cmap="viridis",
-    zmin=None,
-    zmax=None,
-    **kwargs,
-):
-    def imfunc(xp: xr.Dataset, **kwargs):
-        img = xp.roi.compute()
-        if binary_string:
-            img = mpl.colors.Normalize(vmin=zmin, vmax=zmax)(img.to_numpy())
-            img = plt.get_cmap(cmap)(img)[:, :, :3]
-        fig = px.imshow(img, binary_string=binary_string, binary_format=binary_format)
-        contours = get_contours(xp.fg)
-        fig.add_trace(
-            go.Scatter(
-                x=np.concatenate([c[:, 0] for c in contours]),
-                y=np.concatenate([c[:, 1] for c in contours]),
-                mode="lines",
-                showlegend=False,
-                line_color="green",
-            )
-        )
-        contours = get_contours(xp.bg)
-        fig.add_trace(
-            go.Scatter(
-                x=np.concatenate([c[:, 0] for c in contours]),
-                y=np.concatenate([c[:, 1] for c in contours]),
-                mode="lines",
-                showlegend=False,
-                line_color="red",
-            )
-        )
-        return fig.data
+def roishow(xp: xr.Dataset):
+    # TODO: This entire section doesn't handle images with time dimensions correctly.
+    tags, counts = np.unique(xp.tag.to_numpy(), return_counts=True)
+    roi = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0).shape)
+    fg = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0, channel=0).shape, dtype=bool)
+    bg = np.zeros_like(fg)
+    for i, (tag, group) in enumerate(xp.roi.groupby("tag")):
+        roi[: group.sizes["mark"], i] = group
+        fg[: group.sizes["mark"], i] = group.fg.isel(channel=0)
+        bg[: group.sizes["mark"], i] = group.bg.isel(channel=0)
 
-    fig = ndplot(xp, imfunc, animation_frame=animation_frame, facet_col=facet_col, **kwargs)
-    fig.update_layout(width=800, height=800, dragmode="pan")
-    return fig
+    if "channel" in xp.roi.dims:
+        viewer = napari.imshow(
+            roi, channel_axis=xp.roi.dims.index("channel") + 1, name=xp.roi.channel.to_numpy()
+        )[0]
+    else:
+        viewer = napari.imshow(arr)[0]
+
+    viewer.add_labels(
+        bg,
+        name="bg",
+        colormap=napari.utils.CyclicLabelColormap([(0, 0, 0, 0), (1, 0, 0, 0.7)]),
+    )
+    viewer.add_labels(
+        fg,
+        name="fg",
+        colormap=napari.utils.CyclicLabelColormap([(0, 0, 0, 0), (0, 1.0, 0, 0.7)]),
+    )
+
+    viewer.dims.axis_labels = ("mark", "tag", "y", "x")
+    # Make sure dimension sliders get initialized to be 0.
+    viewer.dims.current_step = (0,) * len(roi.shape)
+
+    return viewer
 
 
-def imshow(
-    xp: xr.Dataset,
-):
+def imshow(xp: xr.Dataset):
     settings = napari.settings.get_settings()
     settings.appearance.layer_tooltip_visibility = True
     img = xp.image
@@ -114,16 +98,7 @@ def imshow(
             properties=props,
         )
 
+    # Make sure dimension sliders get initialized to be 0.
+    viewer.dims.current_step = (0,) * len(img.shape)
+
     return viewer
-
-
-def get_contours(fg):
-    contours, _ = cv.findContours(
-        fg.astype("uint8"),
-        cv.RETR_EXTERNAL,
-        cv.CHAIN_APPROX_SIMPLE,
-    )
-    # Remove the extra dimension inserted by opencv and swap coordinates to match
-    # napari's expected input.
-    contours = [c[:, 0, ::-1].astype(float) for c in contours]
-    return contours
