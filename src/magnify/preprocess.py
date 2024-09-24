@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import cast
 import os
+import pathlib
 
 import dask_image.ndinterp
 import tifffile
@@ -12,6 +13,7 @@ import magnify.registry as registry
 
 @registry.component("rotate")
 def rotate(assay: xr.Dataset, rotation=0):
+    # TODO: Fix issue with rotation bug in dask.
     # assay["image"].data = dask_image.ndinterp.rotate(
     #     assay.image.data, rotation, axes=(-1, -2), reshape=False
     # )
