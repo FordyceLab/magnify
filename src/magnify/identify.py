@@ -66,7 +66,10 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     channels = [c for c in assay.channel.values if c in spectra_df.columns]
     sp = spectra_df[channels].to_numpy()
     sel = assay.roi.isel(time=0).sel(channel=channels)
-    intensities = sel.where(sel.fg).mean(dim=["roi_x", "roi_y"]).to_numpy()
+    intensities = (
+        sel.where(sel.fg).mean(dim=["roi_x", "roi_y"])
+        - sel.where(sel.bg).median(dim=["roi_x", "roi_y"])
+    ).to_numpy()
     volumes = np.linalg.lstsq(sp.T, intensities.T, rcond=None)[0].T
     # We also want the lanthanide ratios with respect to the reference lanthanide.
     ratios = volumes / volumes[:, 0:1]
@@ -146,15 +149,17 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
         proportions[i] = np.sum(tag_idxs == tag_idx)
         means[i] = np.median(X_r[tag_idxs == tag_idx], axis=0)
         covs[i] = np.cov(X_r[tag_idxs == tag_idx], rowvar=False)
+    # Set all component variances to be the same since initializing individual covariances can lead to huge terms.
+    covs[:] = np.median(covs, axis=0)
     # Initialize the uniform component.
     proportions[-1] = len(X) - len(X_r)
     proportions /= proportions.sum()
     log_cond_probs = np.empty((len(X), num_codes + 1))
-    log_cond_probs[:, -1] = -np.log(X.max(axis=0) - X.min(axis=0)).sum()
+    log_cond_probs[:, -1] = -np.log(means.max(axis=0) - means.min(axis=0)).sum()
     probs = None
 
     # Run the Expectation-Maximization algorithm.
-    for i in range(30):
+    for i in range(50):
         # E-step: Compute the probability of each point belonging to each component.
         diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
         # Work in log space most of the time to avoid numerical issues.
