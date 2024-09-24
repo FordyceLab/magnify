@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import dask.array as da
 import napari
+import napari.settings
+import napari.utils
 import numpy as np
 import xarray as xr
 
