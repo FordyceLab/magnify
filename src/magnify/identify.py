@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 
+import numba
 import numpy as np
 import pandas as pd
 import scipy
@@ -100,66 +101,102 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     def loss(theta):
         A = theta[: num_lns - 1]
         p = theta[num_lns - 1 :]
-        eps = 1e-6
+        eps = 1e-8
         dist = np.linalg.norm((A * code_ratios + p)[np.newaxis] - X_r[:, np.newaxis], axis=-1)
         # Logsumexp is a smooth approximation to the max function when eps is small.
         return -eps * np.sum(scipy.special.logsumexp(-dist / eps, axis=-1)) / len(X_r)
 
     # Minimize the loss only considering affine transforms close to an estimated scaling factor.
-    scales = (X_r.max(axis=0) - X_r.min(axis=0)) / (
-        code_ratios.max(axis=0) - code_ratios.min(axis=0)
-    )
-    theta = scipy.optimize.minimize(
-        loss,
-        x0=np.concatenate((scales, X_r.min(axis=0) - scales * code_ratios.min(axis=0))),
-        bounds=np.concatenate(
-            (
-                (
-                    np.column_stack((0.75 * scales, 1.25 * scales)),
-                    np.column_stack(
-                        (
-                            (X_r.min(axis=0) - 1.25 * scales * code_ratios.min(axis=0)),
-                            X_r.max(axis=0) - 0.75 * scales * code_ratios.max(axis=0),
-                        )
-                    ),
-                )
-            )
-        ),
-    ).x
-    A = theta[: num_lns - 1]
-    p = theta[num_lns - 1 :]
+    @numba.njit
+    def cluster_1d(points, codes, counts, N=1000):
+        if len(codes) == 1:
+            return 1, points.mean()
+
+        scale = (points.max() - points.min()) / (codes.max() - codes.min())
+        sizes = np.zeros(len(codes))
+        dists = np.ones(len(codes))
+        best_a = 0
+        best_p = 0
+        best_cost = np.inf
+        for a in np.linspace(0.75 * scale, 1.25 * scale, N):
+            for p in np.linspace(points.min(), 0.25 * points.max() + 0.75 * points.min(), N):
+                clusters = a * codes + p
+                curr_start = 0
+                for i in range(len(clusters)):
+                    if i < len(clusters) - 1:
+                        cluster_mid = (clusters[i] + clusters[i + 1]) / 2
+                    else:
+                        cluster_mid = np.inf
+
+                    for j in range(curr_start, len(points)):
+                        if points[j] > cluster_mid:
+                            break
+
+                    if curr_start == j:
+                        dists[i] = np.inf
+                    else:
+                        dists[i] = ((points[curr_start:j + 1] - clusters[i]) ** 2).mean()
+                    sizes[i] = j - curr_start
+                    curr_start = j
+
+                cost = 100 * dists.mean() + ((sizes / sizes.sum() - counts / counts.sum()) ** 2).mean()
+                if cost < best_cost:
+                    best_a = a
+                    best_p = p
+                    best_cost = cost
+
+        return best_a, best_p
+
+    A = np.zeros(num_lns - 1)
+    p = np.zeros(num_lns - 1)
+    for i in range(num_lns - 1):
+        c, counts = np.unique(code_ratios[:, i], return_counts=True)
+        A[i], p[i] = cluster_1d(np.sort(X_r[:, i]), c, counts)
+
     # Cluster points to the closest code.
     tag_idxs = np.argmin(
         np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
     )
 
-    # Change the number of codes to be the number of clusters we found.
-    nonzero_tags, counts = np.unique(tag_idxs, return_counts=True)
-    nonzero_tags = nonzero_tags[counts > 0]
-    num_codes = len(nonzero_tags)
 
     # Step 4: Perform a better clustering using a Gaussian mixture model initialized with the
     # clustering from step 3. We also add a uniform distribution to the mixture which allows us to
     # exclude outliers less agressively.
+    num_codes = len(code_ratios)
     means = np.zeros((num_codes, num_lns - 1))
-    covs = np.zeros((num_codes, num_lns - 1, num_lns - 1))
+    covs = np.zeros((num_codes, num_lns - 1, num_lns - 1)) + np.eye(num_lns - 1) * 1e-10
     proportions = np.zeros(num_codes + 1)
+
     # Initialize the Gaussian components.
-    for i, tag_idx in enumerate(nonzero_tags):
-        proportions[i] = np.sum(tag_idxs == tag_idx)
-        means[i] = np.median(X_r[tag_idxs == tag_idx], axis=0)
-        covs[i] = np.cov(X_r[tag_idxs == tag_idx], rowvar=False)
+    cov = np.zeros([num_lns - 1, num_lns - 1])
+    for i in range(num_codes):
+        proportions[i] = np.sum(tag_idxs == i) + 1
+        means[i] = A * code_ratios[i] + p
+        if proportions[i] > 1:
+            covs[i] += np.cov(X_r[tag_idxs == i], rowvar=False)
+
     # Set all component variances to be the same since initializing individual covariances can lead to huge terms.
     covs[:] = np.median(covs, axis=0)
     # Initialize the uniform component.
-    proportions[-1] = len(X) - len(X_r)
+    proportions[-1] = 1e-10
     proportions /= proportions.sum()
     log_cond_probs = np.empty((len(X), num_codes + 1))
     log_cond_probs[:, -1] = -np.log(means.max(axis=0) - means.min(axis=0)).sum()
     probs = None
 
+    import magnify.plot as mp
+
+    tag_names = np.append(tag_names, "outlier")
     # Run the Expectation-Maximization algorithm.
     for i in range(50):
+        if probs is not None:
+            tag_idxs = np.argmax(probs, axis=1)
+        else:
+            tag_idxs = np.argmin(
+                np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
+            )
+        if i % 10 == 0:
+            mp.mrbles_clusters(assay.assign_coords(tag=("mark", tag_names[tag_idxs])), means=means, covars=covs, exclude_outliers=False).show()
         # E-step: Compute the probability of each point belonging to each component.
         diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
         # Work in log space most of the time to avoid numerical issues.
@@ -189,14 +226,13 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
             / np.sum(probs[:, :-1], axis=0)[:, np.newaxis, np.newaxis]
         )
         # Regularize the covariance matrix to avoid numerical issues.
-        covs += np.eye(X.shape[1]) * 1e-6
+        covs += np.eye(X.shape[1]) * np.median(covs) / 10
         proportions = np.sum(probs, axis=0) / X.shape[0]
 
     # Assign each bead a code based on the clustering we just found.
-    nonzero_tags = np.append(nonzero_tags, -1)
     tag_names = np.append(tag_names, "outlier")
     if probs is not None:
-        tag_idxs = nonzero_tags[np.argmax(probs, axis=1)]
+        tag_idxs = np.argmax(probs, axis=1)
     else:
         tag_idxs = np.argmin(
             np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
