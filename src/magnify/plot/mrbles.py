@@ -310,7 +310,6 @@ def mrbles_clusters(xp, x="dy", y="sm", z=None, means=None, covars=None, exclude
 
         covars = xp.ln_ratio.groupby("tag").map(cov).to_numpy()
 
-    print(means.shape, covars.shape)
     for i in range(means.shape[0]):
         evals, evecs = np.linalg.eigh(covars[i])
         for l in [1, 2, 3]:
@@ -320,7 +319,6 @@ def mrbles_clusters(xp, x="dy", y="sm", z=None, means=None, covars=None, exclude
             y = l * np.sqrt(evals[1]) * np.sin(t)
             # Rotate the ellipse.
             theta = np.arctan2(evecs[0, 1], evecs[0, 0])
-            print(theta)
             x = x * np.cos(theta) - y * np.sin(theta)
             y = x * np.sin(theta) + y * np.cos(theta)
             # Center it at the mean.
