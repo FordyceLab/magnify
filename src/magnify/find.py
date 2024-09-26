@@ -129,9 +129,9 @@ class ButtonFinder:
             ) = self.find_rois(images, t, assay)
             # Eagerly compute the roi values so the dask task graph doesn't get too large.
             # TODO: Look into caching here or storing.
-            assay["roi"] = assay.roi.mg.persist()
-            assay["fg"] = assay.fg.mg.persist()
-            assay["bg"] = assay.bg.mg.persist()
+            assay["roi"] = assay.roi.persist()
+            assay["fg"] = assay.fg.persist()
+            assay["bg"] = assay.bg.persist()
 
         # Now fill in the remaining timesteps where we aren't searching.
         for t, time in enumerate(tqdm.tqdm(assay.time, disable=not self.progress_bar)):
@@ -189,10 +189,10 @@ class ButtonFinder:
             assay.sizes["roi_y"],
             assay.sizes["roi_x"],
         ]
-        # Eagerly compute the rechunking to prevent delays.
-        assay["roi"] = assay.roi.chunk(chunk_sizes).cache()
-        assay["fg"] = assay.fg.chunk(chunk_sizes).cache()
-        assay["bg"] = assay.bg.chunk(chunk_sizes).cache()
+        # Cache the rechunked array to prevent delays.
+        assay["roi"] = assay.roi.chunk(chunk_sizes).mg.cache()
+        assay["fg"] = assay.fg.chunk(chunk_sizes).mg.cache()
+        assay["bg"] = assay.bg.chunk(chunk_sizes).mg.cache()
 
         return assay
 
