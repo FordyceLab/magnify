@@ -58,43 +58,63 @@ def imshow(xp: xr.Dataset):
         viewer = napari.imshow(img)[0]
 
     if "roi" in xp:
-        roi = xp.roi.compute()
         # Initialize image metadata.
-        roi_contours = []
-        fg_labels = np.zeros((img.sizes["im_y"], img.sizes["im_x"]), dtype=int)
-        for idx, m in roi.groupby("mark"):
-            # Get the centers and the bounds of the bounding box.
-            top, bottom, left, right = utils.bounding_box(
-                m.x.astype(int).item(),
-                m.y.astype(int).item(),
-                roi.sizes["roi_y"],
-                img.shape[-1],
-                img.shape[-2],
-            )
-            # Set the roi bounding box.
-            roi_contours.append(np.array([[top, left], [bottom, right]]))
-            # Set the foreground label in image coordinates.
-            fg = m.fg.to_numpy()
-            while fg.ndim > 2:
-                # TODO: Handle channels & time dimensions more elegantly.
-                fg = fg[0]
-            fg_labels[top:bottom, left:right] = (idx + 1) * fg + fg_labels[
-                top:bottom, left:right
-            ] * (1 - fg)
+        extra_dims = [d for d in xp.roi.dims if d not in ["mark", "roi_y", "roi_x"]]
+        extra_dim_shape = [xp.sizes[d] for d in extra_dims]
+        if len(extra_dims) > 0:
+            roi_stack = xp.roi.stack(extra_dims=extra_dims).compute()
+        else:
+            roi_stack = xp.expand_dims("extra_dims").compute()
 
-        props = {"mark": [i for i in range(xp.sizes["mark"])], "tag": list(xp.tag.to_numpy())}
+        roi_stack = roi_stack.transpose("mark", "extra_dims", "roi_y", "roi_x")
+        fg_labels = np.zeros(
+            (roi_stack.sizes["extra_dims"], xp.sizes["im_y"], xp.sizes["im_x"]), dtype=int
+        )
+        roi_contours = np.zeros(
+            (roi_stack.sizes["mark"], roi_stack.sizes["extra_dims"], 4, len(extra_dims) + 2),
+            dtype=int,
+        )
+        for i, mark in enumerate(roi_stack.mark):
+            for j, d in enumerate(roi_stack.extra_dims):
+                m = roi_stack.sel(mark=mark, extra_dims=d)
+                # Get the centers and the bounds of the bounding box.
+                top, bottom, left, right = utils.bounding_box(
+                    m.x.astype(int).item(),
+                    m.y.astype(int).item(),
+                    roi_stack.sizes["roi_y"],
+                    img.shape[-1],
+                    img.shape[-2],
+                )
+                # Set the roi bounding box.
+                roi_contours[i, j, :, :-2] = np.unravel_index(j, extra_dim_shape)
+                roi_contours[i, j, :, -2:] = np.array(
+                    [[top, left], [top, right], [bottom, right], [bottom, left]], dtype=int
+                )
+                # Set the foreground label in image coordinates.
+                fg = m.fg.to_numpy()
+                fg_labels[j, top:bottom, left:right] = (i + 1) * fg + fg_labels[
+                    j, top:bottom, left:right
+                ] * (1 - fg)
+
+        fg_labels = fg_labels.reshape(img.shape)
+        roi_contours = roi_contours.reshape(-1, 4, len(extra_dims) + 2)
+        props = {"mark": [f"{mark.item()}" for mark in xp.mark], "tag": list(xp.tag.to_numpy())}
         viewer.add_labels(
             fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
         )
+        props["mark"] = np.repeat(props["mark"], roi_stack.sizes["extra_dims"])
+        props["tag"] = np.repeat(props["tag"], roi_stack.sizes["extra_dims"])
         viewer.add_shapes(
             roi_contours,
             shape_type="rectangle",
             name="roi",
+            edge_color="white",
+            edge_width=2,
             face_color="transparent",
             text={
                 "string": "{mark}: {tag}",
                 "size": 10,
-                "translation": [-roi.sizes["roi_y"] // 2 + 5, 0],
+                "translation": [0] * len(extra_dims) + [-xp.sizes["roi_y"] // 2 + 5, 0],
                 "visible": False,
             },
             properties=props,
