@@ -36,7 +36,7 @@ class Reader:
         data = [data] if isinstance(data, str | xr.DataArray | xr.Dataset) else data
         for d in data:
             if isinstance(d, xr.Dataset | xr.DataArray):
-                yield normalize_assay(d)
+                yield standardize(d)
                 continue
 
             path_dict, meta_dict = extract_paths(
@@ -45,33 +45,35 @@ class Reader:
             if len(path_dict) == 0:
                 raise FileNotFoundError(f"The pattern {d} did not lead to any files.")
 
-            # None assay names should just mean a nameless assay.
+            # None xp names should just mean a nameless experiment.
             path_dict = {("",) + k[1:] if k[0] is None else k: v for k, v in path_dict.items()}
-            assay_names = set(list(zip(*path_dict.keys()))[0])
+            xp_names = set(list(zip(*path_dict.keys()))[0])
 
-            for assay_name in sorted(assay_names, key=utils.natural_sort_key):
-                # Extract the paths for this assay and turn all Nones into -1 so sorting works.
-                assay_dict = {
+            for xp_name in sorted(xp_names, key=utils.natural_sort_key):
+                # Extract the paths for this experiment and turn all Nones into -1 so sorting works.
+                xp_dict = {
                     tuple(-1 if x is None else x for x in k[1:]): v
                     for k, v in path_dict.items()
-                    if k[0] == assay_name
+                    if k[0] == xp_name
                 }
 
-                path = pathlib.Path(next(iter(assay_dict.values())))
+                path = pathlib.Path(next(iter(xp_dict.values())))
                 # The only time we should have a directory is when we have a zarr array.
-                if len(assay_dict) == 1 and path.is_dir():
+                if len(xp_dict) == 1 and path.is_dir():
                     if not (path / ".zattrs").is_file():
                         # The file was written with a recent prismo version.
                         # The last element in the path is the group directory.
-                        assay = xr.open_zarr(path.parent, group=path.name)
+                        xp = xr.open_zarr(path.parent, group=path.name)
                     else:
                         # The file was writen with prismo version 0.0.1 with no groups.
-                        assay = xr.open_zarr(path)
-                    assay.attrs["name"] = assay_name
+                        xp = xr.open_zarr(path)
+                    xp.attrs["name"] = xp_name
                 else:
-                    assay = read_tiffs(assay_dict, channels=channels, times=times, assay_name=assay_name, meta_dict=meta_dict)
+                    xp = read_tiffs(
+                        xp_dict, channels=channels, times=times, name=xp_name, meta_dict=meta_dict
+                    )
 
-                yield normalize_assay(assay)
+                yield standardize(xp)
 
     @registry.readers.register("read")
     def make():
@@ -163,16 +165,14 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
 
 
 def read_tiffs(
-    assay_dict: dict[tuple[int, str, int, int], str],
+    xp_dict: dict[tuple[int, str, int, int], str],
     channels: Sequence[str] | None,
     times: Sequence[str] | None,
-    assay_name: str,
+    name: str,
     meta_dict,
 ) -> xr.Dataset:
     # Get the indices specified in the path each in sorted order.
-    channel_idxs, time_idxs, row_idxs, col_idxs = (
-        sorted(set(idx)) for idx in zip(*assay_dict.keys())
-    )
+    channel_idxs, time_idxs, row_idxs, col_idxs = (sorted(set(idx)) for idx in zip(*xp_dict.keys()))
 
     # Check which dimensions are specified in the path and compute the shape of those dimensions.
     dims_in_path = []
@@ -197,7 +197,7 @@ def read_tiffs(
         channels = channel_idxs
 
     # Read in a single image to get the metadata stored within the file.
-    with tifffile.TiffFile(next(iter(assay_dict.values()))) as tif:
+    with tifffile.TiffFile(next(iter(xp_dict.values()))) as tif:
         dtype = tif.series[0].dtype
         inner_shape = tif.series[0].shape
         page_shape = tif.pages[0].shape
@@ -261,7 +261,7 @@ def read_tiffs(
         raise ValueError("Dimensions specified in the path names and inside the tiff file overlap.")
 
     # Setup a dask array to lazyload image tiles and extract attributes.
-    filenames = [x for _, x in sorted(assay_dict.items())]
+    filenames = [x for _, x in sorted(xp_dict.items())]
 
     def read_tile(block_id, filenames):
         outer_id = block_id[: len(outer_shape)]
@@ -306,50 +306,33 @@ def read_tiffs(
         coords["time"] = [int(t.timestamp()) for t in times]
 
     # Put all our data into an xarray dataset.
-    assay = xr.Dataset(
+    xp = xr.Dataset(
         {"tile": (dims_in_path + dims_in_file, tiles)},
         coords=coords,
-        attrs={"name": assay_name},
+        attrs={"name": name},
     )
 
     # Add any metadata coordinates specified by the user.
     for (meta_name, dim), meta_idxs_dict in meta_dict.items():
         if dim == "time":
             # Make sure we're indexing using datetimes.
-            dim_idxs = [datetime.datetime.fromtimestamp(idx) for idx in assay[dim].values]
+            dim_idxs = [datetime.datetime.fromtimestamp(idx) for idx in xp[dim].values]
         else:
-            dim_idxs = assay[dim].values
+            dim_idxs = xp[dim].values
 
         meta_idxs = [meta_idxs_dict[dim_idx] for dim_idx in dim_idxs]
-        assay = assay.assign_coords({meta_name: (dim, meta_idxs)})
+        xp = xp.assign_coords({meta_name: (dim, meta_idxs)})
 
-    return assay
+    return xp
 
 
-def normalize_assay(assay: xr.Dataset | xr.DataArray) -> xr.Dataset:
-    if isinstance(assay, xr.DataArray):
-        assay = xr.Dataset({"tile": assay}).assign_attrs(assay.attrs)
+def standardize(xp: xr.Dataset | xr.DataArray) -> xr.Dataset:
+    if isinstance(xp, xr.DataArray):
+        xp = xr.Dataset({"tile": xp}).assign_attrs(xp.attrs)
 
     # Rename dimensions since we'll be adding new arrays whose names will conflict.
     for old_name in ["x", "y", "row", "col"]:
-        if old_name in assay.tile.dims:
-            assay = assay.rename({old_name: "tile_" + old_name})
+        if old_name in xp.tile.dims:
+            xp = xp.rename({old_name: "tile_" + old_name})
 
-    desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
-    # If we have additional dimensions stack them all into a single time dimension.
-    extra_dims = [dim for dim in assay.tile.dims if dim not in desired_order]
-    if len(extra_dims) > 0:
-        if "time" in assay.tile.dims:
-            # Rename the time dimension to avoid conflicts.
-            assay = assay.rename(time="__time__")
-            extra_dims.append("__time__")
-        assay = assay.stack(time=extra_dims)
-
-    # Reorder the dimensions so they're always consistent and add missing dimensions.
-    for dim in desired_order:
-        if dim not in assay.tile.dims:
-            assay["tile"] = assay.tile.expand_dims(dim)
-
-    assay = assay.transpose(*desired_order)
-
-    return assay
+    return utils.standardize(xp)
