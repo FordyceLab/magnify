@@ -108,7 +108,7 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
 
     # Minimize the loss only considering affine transforms close to an estimated scaling factor.
     @numba.njit
-    def cluster_1d(points, codes, counts, N=1000):
+    def fit_1d(points, codes, counts, N=100):
         if len(codes) == 1:
             return 1, points.mean()
 
@@ -151,7 +151,7 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     p = np.zeros(num_lns - 1)
     for i in range(num_lns - 1):
         c, counts = np.unique(code_ratios[:, i], return_counts=True)
-        A[i], p[i] = cluster_1d(np.sort(X_r[:, i]), c, counts)
+        A[i], p[i] = fit_1d(np.sort(X_r[:, i]), c, counts)
 
     # Cluster points to the closest code.
     tag_idxs = np.argmin(
@@ -184,19 +184,9 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     log_cond_probs[:, -1] = -np.log(means.max(axis=0) - means.min(axis=0)).sum()
     probs = None
 
-    import magnify.plot as mp
-
     tag_names = np.append(tag_names, "outlier")
     # Run the Expectation-Maximization algorithm.
     for i in range(50):
-        if probs is not None:
-            tag_idxs = np.argmax(probs, axis=1)
-        else:
-            tag_idxs = np.argmin(
-                np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
-            )
-        if i % 10 == 0:
-            mp.mrbles_clusters(assay.assign_coords(tag=("mark", tag_names[tag_idxs])), means=means, covars=covs, exclude_outliers=False).show()
         # E-step: Compute the probability of each point belonging to each component.
         diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
         # Work in log space most of the time to avoid numerical issues.
