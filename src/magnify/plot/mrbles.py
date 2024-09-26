@@ -276,7 +276,7 @@ cmap = [
 
 def mrbles_clusters(xp, x="dy", y="sm", z=None, means=None, covars=None, exclude_outliers=True):
     if exclude_outliers:
-        xp = xp.where(xp.tag != "outlier", drop=True)
+        xp = xp.drop("image").where(xp.tag != "outlier")
 
     # Draw the data scatterplots first.
     if z is None:
@@ -298,6 +298,8 @@ def mrbles_clusters(xp, x="dy", y="sm", z=None, means=None, covars=None, exclude
             color_discrete_sequence=cmap,
             color_discrete_map={"outlier": "red"},
         )
+
+    fig.update_traces(marker_line_width=0.5)
 
     # Now draw the mixture of Gaussian contours. We want to always exclude the outlier points here.
     xp = xp.where(xp.tag != "outlier", drop=True).sel(ln=[x, y] if z is None else [x, y, z])
