@@ -12,7 +12,9 @@ import magnify.utils as utils
 
 
 class Pipeline:
-    def __init__(self, reader: str, config: dict[str, dict[str, str]]):
+    def __init__(self, 
+                reader: str, 
+                config: dict[str, dict[str, str]]):
         self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(reader)()
         self.config = confection.Config(config)
         self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
@@ -22,12 +24,10 @@ class Pipeline:
         else:
             logger.log_level = logging.INFO
 
-    def __call__(
-        self,
-        data: ArrayLike | str,
-        times: Sequence[int] | None = None,
-        channels: Sequence[str] | None = None,
-    ) -> xr.Dataset | list[xr.Dataset]:
+    def __call__(self,
+                data: ArrayLike | str,
+                times: Sequence[int] | None = None,
+                channels: Sequence[str] | None = None) -> xr.Dataset | list[xr.Dataset]:
         inputs = self.reader(data=data, times=times, channels=channels)
         assays = []
         for assay in inputs:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 import functools
 import inspect
-from typing import Callable
+from typing import Callable, Sequence
 
 from numpy.typing import ArrayLike
 import catalogue
 import confection
+import xarray as xr
 
 from magnify.pipeline import Pipeline
 
@@ -85,7 +86,14 @@ def pc_chip(**kwargs):
     return pipe
 
 
-def mrbles(**kwargs):
+def mrbles(data: ArrayLike | str = None,
+            return_pipe = False,                 
+            times: Sequence[int] | None = None,
+            channels: Sequence[str] | None = None,
+            **kwargs) -> Pipeline | xr.Dataset | list[xr.Dataset]:
+    if not return_pipe and data is None:
+        raise ValueError("The 'data' parameter cannot be None when 'return_pipe' is False.")
+    
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
     pipe.add_pipe("stitch")
@@ -93,7 +101,9 @@ def mrbles(**kwargs):
     pipe.add_pipe("identify_mrbles")
     pipe.add_pipe("drop")
 
-    return pipe
+    if return_pipe:
+        return pipe
+    return pipe(data=data, times=times, channels=channels)
 
 
 def beads(**kwargs):
