@@ -6,6 +6,7 @@ from typing import Callable
 from numpy.typing import ArrayLike
 import catalogue
 import confection
+from functools import wraps
 
 from magnify.pipeline import Pipeline
 
@@ -28,7 +29,28 @@ def component(name):
 
     return component_decorator
 
+def pipeline_wrapper(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Extract parameters from args or kwargs (depending on how they are passed)
+        data = kwargs.get('data', None) if 'data' in kwargs else None
+        times = kwargs.get('data', None) if 'times' in kwargs else None
+        channels = kwargs.get('data', None) if 'channels' in kwargs else None
+        return_pipe = kwargs.get('return_pipe', False) if 'return_pipe' in kwargs else False
 
+        # Input check: If pipe is to be executed, a path to data must be provided.
+        if not return_pipe and data is None:
+            raise ValueError("The 'data' parameter cannot be None when 'return_pipe' is False.")
+
+        pipe = func(*args, **kwargs)
+
+        if return_pipe:
+            return pipe 
+        else:
+            return pipe(data=data, times=times, channels=channels)
+    return wrapper
+
+@pipeline_wrapper
 def mini_chip(**kwargs):
     # Button centers are apart 375um vertically and 655um horizontally.
     # Assuming a 4x objective and 1x1 binning each pixel is 1.61um.
@@ -46,7 +68,7 @@ def mini_chip(**kwargs):
 
     return pipe
 
-
+@pipeline_wrapper
 def ps_chip(**kwargs):
     # Button centers are apart 375um vertically and 655um horizontally.
     # Assuming a 4x objective and 2x2 binning each pixel is 3.22um.
@@ -64,7 +86,7 @@ def ps_chip(**kwargs):
 
     return pipe
 
-
+@pipeline_wrapper
 def pc_chip(**kwargs):
     # Button centers are apart 412um vertically and 760um horizontally.
     # Assuming a 4x objective and 2x2 binning each pixel is 3.22um.
@@ -84,7 +106,7 @@ def pc_chip(**kwargs):
 
     return pipe
 
-
+@pipeline_wrapper
 def mrbles(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
@@ -95,7 +117,7 @@ def mrbles(**kwargs):
 
     return pipe
 
-
+@pipeline_wrapper
 def beads(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("flatfield_correct")
@@ -105,7 +127,7 @@ def beads(**kwargs):
 
     return pipe
 
-
+@pipeline_wrapper
 def image(**kwargs):
     pipe = Pipeline("read", config=kwargs)
     pipe.add_pipe("stitch")
