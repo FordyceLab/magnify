@@ -34,8 +34,8 @@ def pipeline_wrapper(func):
     def wrapper(*args, **kwargs):
         # Extract parameters from args or kwargs (depending on how they are passed)
         data = kwargs.get('data', None) if 'data' in kwargs else None
-        times = kwargs.get('data', None) if 'times' in kwargs else None
-        channels = kwargs.get('data', None) if 'channels' in kwargs else None
+        times = kwargs.get('times', None) if 'times' in kwargs else None
+        channels = kwargs.get('channels', None) if 'channels' in kwargs else None
         return_pipe = kwargs.get('return_pipe', False) if 'return_pipe' in kwargs else False
 
         # Input check: If pipe is to be executed, a path to data must be provided.
