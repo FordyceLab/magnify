@@ -2,12 +2,15 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 import inspect
+import os
 import re
 
 import cv2 as cv
 import numba
 import numpy as np
-import xarray as xr
+
+
+PathLike = str | bytes | os.PathLike
 
 
 def to_uint8(arr: np.ndarray) -> np.ndarray:
