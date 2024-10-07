@@ -784,6 +784,7 @@ def mrbles(
     spectra: str | PathLike | StringIO,
     codes: str | PathLike | StringIO,
     data: ArrayLike | str,
+    debug: bool = False,
     times: Sequence[int] | None = None,
     channels: Sequence[str] | None = None,
     flatfield: float = 1.0,
@@ -802,14 +803,7 @@ def mrbles(
     roi_only: bool = False,
     drop_tiles: bool = True,
 ) -> xr.Dataset | list[xr.Dataset]:
-    pipe = mrbles_pipe(spectra=spectra, codes=codes, flatfield=flatfield, darkfield=darkfield, overlap=overlap,
-                       min_bead_radius=min_bead_radius, max_bead_radius=max_bead_radius, low_edge_quantile=low_edge_quantile,
-                       high_edge_quantile=high_edge_quantile, num_iter=num_iter, min_roundness=min_roundness,
-                       roi_length=roi_length, search_channel=search_channel, reference=reference, squeeze=squeeze,
-                       roi_only=roi_only, drop_tiles=drop_tiles)
-    return pipe(data=data, times=times, channels=channels)
-
-"""
+    """
     Processes image data for MRBLEs (Microsphere-based Rolling Circle Amplification Beads), applying flatfield correction, bead detection, and spectral decoding.
 
     Parameters
@@ -889,11 +883,19 @@ def mrbles(
     
     This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using channel 0 for analysis, and matching bead spectral signatures against `my_spectra` and `my_codes`.
     """
+    pipe = mrbles_pipe(debug=debug, spectra=spectra, codes=codes, flatfield=flatfield, darkfield=darkfield, overlap=overlap,
+                       min_bead_radius=min_bead_radius, max_bead_radius=max_bead_radius, low_edge_quantile=low_edge_quantile,
+                       high_edge_quantile=high_edge_quantile, num_iter=num_iter, min_roundness=min_roundness,
+                       roi_length=roi_length, search_channel=search_channel, reference=reference, squeeze=squeeze,
+                       roi_only=roi_only, drop_tiles=drop_tiles)
+    return pipe(data=data, times=times, channels=channels)
+
 
 
 def mrbles_pipe(
     spectra: str | PathLike | StringIO,
     codes: str | PathLike | StringIO,
+    debug: bool = False,
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
@@ -1089,7 +1091,7 @@ def beads(
     """
 
 def beads_pipe(
-    debug:bool = False,
+    debug: bool = False,
     flatfield:float = 1.0,
     darkfield:float = 0.0,
     overlap: int = 102,
@@ -1178,7 +1180,7 @@ def image(
     data: ArrayLike | str,
     times: Sequence[int] | None = None,
     channels: Sequence[str] | None = None,
-    debug:bool = False,
+    debug: bool = False,
     overlap: int = 102,
     rotation:float = 0,
     squeeze: bool = True,
