@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dask.array as da
 import napari
 import napari.settings
 import napari.utils
@@ -26,7 +25,7 @@ def roishow(xp: xr.Dataset):
             roi, channel_axis=xp.roi.dims.index("channel") + 1, name=xp.roi.channel.to_numpy()
         )[0]
     else:
-        viewer = napari.imshow(arr)[0]
+        viewer = napari.imshow(roi)[0]
 
     viewer.add_labels(
         bg,

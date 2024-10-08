@@ -1,15 +1,9 @@
 from __future__ import annotations
-from typing import Callable
-import functools
-import itertools
+
 import math
 
-from plotly.subplots import make_subplots
-import plotly
 import plotly.graph_objects as go
-import xarray as xr
-
-import magnify.utils as utils
+from plotly.subplots import make_subplots
 
 
 def ndplot(
@@ -30,7 +24,6 @@ def ndplot(
         else:
             sub_xp = xp
 
-        indexes = []
         if facet_row is not None and facet_col is not None:
             fig = make_subplots(
                 rows=len(sub_xp[facet_row]),

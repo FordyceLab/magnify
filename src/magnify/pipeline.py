@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import logging
 from typing import Callable, Sequence
 
 import confection
-from numpy.typing import ArrayLike
 import xarray as xr
+from numpy.typing import ArrayLike
 
 import magnify.logger as logger
 import magnify.registry as registry
@@ -17,7 +18,7 @@ class Pipeline:
         self.config = confection.Config(config)
         self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
 
-        if "debug" in self.config and self.config["debug"] == True:
+        if "debug" in self.config and self.config["debug"]:
             logger.log_level = logging.DEBUG
         else:
             logger.log_level = logging.INFO
@@ -40,37 +41,6 @@ class Pipeline:
             assays = assays[0]
 
         return assays
-
-    def add_pipe(
-        self,
-        name: str,
-        after: str | int | None = None,
-        before: str | int | None = None,
-        first: bool = False,
-        last: bool = False,
-    ) -> None:
-        component_factory = registry.components.get(name)
-        component = component_factory(**utils.valid_kwargs(self.config, component_factory))
-
-        if after is None and before is None and not first and not last:
-            last = True
-        if (after is not None) + (before is not None) + first + last > 1:
-            raise ValueError("Only one of after, before, first, and last can be set.")
-        new_element = (name, component)
-        if first:
-            idx = 0
-        elif last:
-            idx = len(self.components)
-        elif isinstance(before, int):
-            idx = before
-        elif isinstance(before, str):
-            idx = [name for (name, _) in self.components].index(before)
-        elif isinstance(after, int):
-            idx = after + 1
-        elif isinstance(after, str):
-            idx = [name for (name, _) in self.components].index(after) + 1
-
-        self.components.insert(idx, new_element)
 
     def add_pipe(
         self,

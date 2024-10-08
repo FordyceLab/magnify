@@ -1,11 +1,9 @@
 from __future__ import annotations
-from typing import cast
+
 import os
 import pathlib
 
-import dask_image.ndinterp
 import tifffile
-import numpy as np
 import xarray as xr
 
 import magnify.registry as registry
@@ -41,7 +39,6 @@ def flatfield_correct(assay: xr.Dataset, flatfield=1.0, darkfield=0.0):
         with tifffile.TiffFile(darkfield) as tif:
             darkfield = tif.asarray()
 
-    dtype = assay.tile.dtype
     tiles = (assay.tile.astype(float) - darkfield).clip(min=0)
     max_val = tiles.max()
     tiles = tiles / flatfield

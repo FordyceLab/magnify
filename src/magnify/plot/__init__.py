@@ -6,7 +6,7 @@ __all__ = [
     "roishow",
     "set_style",
 ]
-from magnify.plot.image import roishow, imshow
+from magnify.plot.image import imshow, roishow
 from magnify.plot.mrbles import mrbles_clusters
 from magnify.plot.ndplot import ndplot
 from magnify.plot.relation import relplot

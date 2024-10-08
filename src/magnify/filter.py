@@ -4,8 +4,8 @@ import cv2 as cv
 import numpy as np
 import xarray as xr
 
-from magnify import utils
 import magnify.registry as registry
+from magnify import utils
 
 
 @registry.component("filter_expression")
@@ -58,7 +58,6 @@ def filter_nonround(
         for i in range(assay.sizes["mark"]):
             contours, _ = cv.findContours(fg[i], cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             perimeter = sum(cv.arcLength(c, True) for c in contours)
-            area = sum(cv.contourArea(c) for c in contours)
             if perimeter == 0:
                 assay.valid[i] = False
                 continue

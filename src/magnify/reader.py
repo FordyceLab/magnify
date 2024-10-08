@@ -1,5 +1,5 @@
 from __future__ import annotations
-from collections.abc import Iterator, Sequence
+
 import collections
 import datetime
 import fnmatch
@@ -8,17 +8,14 @@ import glob
 import os
 import pathlib
 import re
+from collections.abc import Iterator, Sequence
 
-from numpy.typing import ArrayLike
-from typing import Iterator
 import bs4
 import dask.array as da
 import numpy as np
-import pandas as pd
 import tifffile
 import xarray as xr
 
-from magnify.pipeline import Pipeline
 import magnify.registry as registry
 import magnify.utils as utils
 
@@ -127,8 +124,7 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
         for name, formatter_str, format_str in meta_search:
             meta_formatter = default_formatters[formatter_str]
             # Once again we need to set default arguments because of closure rules in Python.
-            meta_formatter = lambda x, y=format_str, f=meta_formatter: f(x, y)
-            meta[key][name] = meta_formatter
+            meta[key][name] = lambda x, y=format_str, f=meta_formatter: f(x, y)
 
     regex_path = re.compile(regex_path, re.IGNORECASE)
     # Search for files matching the pattern.
@@ -289,11 +285,9 @@ def read_tiffs(
         functools.partial(read_tile, filenames=filenames),
         dtype=dtype,
         chunks=(
-            (
-                tuple((1,) * size for size in outer_shape)
-                + tuple((1,) * size for size in inner_shape[: -len(page_shape)])
-                + inner_shape[-len(page_shape) :]
-            )
+            tuple((1,) * size for size in outer_shape)
+            + tuple((1,) * size for size in inner_shape[: -len(page_shape)])
+            + inner_shape[-len(page_shape) :]
         ),
     )
 

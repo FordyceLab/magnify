@@ -1,14 +1,14 @@
 from __future__ import annotations
-from collections.abc import Callable, Iterable
-from typing import Any
+
 import inspect
 import os
 import re
+from collections.abc import Callable, Iterable
+from typing import Any
 
 import cv2 as cv
 import numba
 import numpy as np
-
 
 PathLike = str | bytes | os.PathLike
 
