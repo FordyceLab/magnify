@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import re
 
 import numba
@@ -135,11 +136,13 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
                     if curr_start == j:
                         dists[i] = np.inf
                     else:
-                        dists[i] = ((points[curr_start:j + 1] - clusters[i]) ** 2).mean()
+                        dists[i] = ((points[curr_start : j + 1] - clusters[i]) ** 2).mean()
                     sizes[i] = j - curr_start
                     curr_start = j
 
-                cost = 100 * dists.mean() + ((sizes / sizes.sum() - counts / counts.sum()) ** 2).mean()
+                cost = (
+                    100 * dists.mean() + ((sizes / sizes.sum() - counts / counts.sum()) ** 2).mean()
+                )
                 if cost < best_cost:
                     best_a = a
                     best_p = p
@@ -158,7 +161,6 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
         np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
     )
 
-
     # Step 4: Perform a better clustering using a Gaussian mixture model initialized with the
     # clustering from step 3. We also add a uniform distribution to the mixture which allows us to
     # exclude outliers less agressively.
@@ -168,7 +170,6 @@ def indentify_mrbles(assay, spectra, codes, reference="eu"):
     proportions = np.zeros(num_codes + 1)
 
     # Initialize the Gaussian components.
-    cov = np.zeros([num_lns - 1, num_lns - 1])
     for i in range(num_codes):
         proportions[i] = np.sum(tag_idxs == i) + 1
         means[i] = A * code_ratios[i] + p

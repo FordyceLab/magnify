@@ -2,20 +2,17 @@ from __future__ import annotations
 
 import math
 
-from numba import prange
-from numpy.typing import ArrayLike
 import cv2 as cv
 import dask.array as da
 import numba
 import numpy as np
 import scipy
-import sklearn.mixture
 import tqdm
 import xarray as xr
+from numba import prange
 
-from magnify import logger
-from magnify import utils
 import magnify.registry as registry
+from magnify import logger, utils
 
 
 class ButtonFinder:
@@ -291,7 +288,6 @@ class ButtonFinder:
         search_channel_idxs = [
             list(assay.channel.to_numpy()).index(c) for c in self.search_channels
         ]
-        offsets = np.zeros((num_rows, num_cols, 2), dtype=int)
 
         for i in range(num_rows):
             for j in range(num_cols):
@@ -314,7 +310,7 @@ class ButtonFinder:
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
                         find_circles
-                        circles, scores = new_points = find_circles(
+                        circles, scores = find_circles(
                             subimage,
                             low_edge_quantile=self.low_edge_quantile,
                             high_edge_quantile=(
@@ -341,8 +337,6 @@ class ButtonFinder:
                     x[i, j] += left
                     y[i, j] += top
                     # Move the roi bounding box to center the new x, y values.
-                    old_top = top
-                    old_left = left
                     top, bottom, left, right = utils.bounding_box(
                         round(x[i, j]),
                         round(y[i, j]),
@@ -837,8 +831,6 @@ def candidate_circles(edges, grid_length, num_iter):
         # entire coordinate system on p0 to make calculations easier.
         row = p0_grid[0]
         col = p0_grid[1]
-        s = grid_starts[row, col]
-        e = s + grid_counts[row, col]
         idx = grid_starts[row, col] + np.random.choice(grid_counts[row, col])
         p1 = grid_coords[idx] - p0
         idx = grid_starts[row, col] + np.random.choice(grid_counts[row, col])

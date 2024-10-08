@@ -1,6 +1,6 @@
 import numpy as np
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
 
 cmap = [
     "#000000",
@@ -314,11 +314,11 @@ def mrbles_clusters(xp, x="dy", y="sm", z=None, means=None, covars=None, exclude
 
     for i in range(means.shape[0]):
         evals, evecs = np.linalg.eigh(covars[i])
-        for l in [1, 2, 3]:
+        for level in [1, 2, 3]:
             # Parametric equation for an ellipse aligned to x-y axes.
             t = np.linspace(0, 2 * np.pi)
-            x = l * np.sqrt(evals[0]) * np.cos(t)
-            y = l * np.sqrt(evals[1]) * np.sin(t)
+            x = level * np.sqrt(evals[0]) * np.cos(t)
+            y = level * np.sqrt(evals[1]) * np.sin(t)
             # Rotate the ellipse.
             theta = np.arctan2(evecs[0, 1], evecs[0, 0])
             x = x * np.cos(theta) - y * np.sin(theta)

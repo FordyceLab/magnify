@@ -5,14 +5,13 @@ import plotly.express as px
 import scipy.stats
 import xarray as xr
 
-from magnify import utils
 from magnify.plot.ndplot import ndplot
 
 
 def relplot(
     assay: xr.Dataset,
-    x="time.seconds",
-    y="tag_intensity",
+    x="time",
+    y="intensity",
     fit_method="linear",
     grid=None,
     hue=None,
@@ -24,29 +23,10 @@ def relplot(
             slider = ["channel", "tag"]
         else:
             slider = ["channel", "tag"]
-    if hue is None:
-        hue = ["mark", "mark_row", "mark_col"]
-        hue = [h for h in hue if h in assay.dims]
-
-    fit_func = {"linear": linear_fit, "quadratic": quadratic_fit, "exp_linear": exp_linear_fit}[
-        fit_method
-    ]
 
     def relfunc(assay: xr.Dataset, **kwargs):
-        assay = utils.sel_tag(assay, assay.tag)
         assay = assay.where(assay.valid, drop=True)
-        overlays = []
-        if assay.sizes[hue] == 0:
-            return hv.Overlay([hv.Points((0, 0))])
-        for name, group in assay.groupby(hue):
-            l = str((int(group.mark_row), int(group.mark_col)))
-            x_v = group[x].to_numpy()
-            y_v = group[y].to_numpy()
-            points = hv.Points((x_v, y_v)).opts(**kwargs)
-            curve = hv.Curve((x_v, fit_func(x_v, y_v)))
-            overlays.append(points * curve)
-
-        return hv.Overlay(overlays)
+        return px.scatter(assay.to_dataframe().reset_index(), x=x, y=y, color=hue).data
 
     return ndplot(assay, relfunc, grid=grid, slider=slider, **kwargs)
 
