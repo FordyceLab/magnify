@@ -45,7 +45,7 @@ def identify_buttons(assay, shape=None, pinlist=None, blank=None):
 
 
 @registry.component("identify_mrbles")
-def indentify_mrbles(assay, spectra, codes, reference="eu"):
+def identify_mrbles(assay, spectra, codes, reference="eu"):
     # Read in the dataframe of lanthanide spectra and make sure the reference lanthanide is first.
     spectra_df = pd.read_csv(spectra)
     ref_idx = spectra_df[spectra_df["name"] == reference].index[0]
