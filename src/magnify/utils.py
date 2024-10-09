@@ -88,3 +88,65 @@ def to_list(x: Any) -> list:
         return [x]
     else:
         return list(x)
+
+
+@numba.njit
+def filled_circle_points(r):
+    size = 2 * r + 1
+    arr = np.zeros((size, size), dtype=np.uint8)
+    pts = np.zeros((size**2, 2), dtype=np.int32)
+    perimeter = circle_points(r)
+    n = len(perimeter)
+    pts[:n] = perimeter
+
+    for i in range(n):
+        arr[pts[i, 0] + r, pts[i, 1] + r] = 1
+
+    for i in range(0, 2 * r + 1):
+        j = 0
+        while not arr[i, j]:
+            j += 1
+        while arr[i, j]:
+            j += 1
+        if j <= r:
+            while not arr[i, j]:
+                pts[n, 0] = i - r
+                pts[n, 1] = j - r
+                n += 1
+                j += 1
+
+    return pts[:n]
+
+
+@numba.njit
+def circle_points(r, four_connected=False):
+    # Draw a circle using the Breseham circle algorithm
+    # see: https://funloop.org/post/2021-03-15-bresenham-circle-drawing-algorithm.html
+    points = np.zeros((20 * r, 2), dtype=np.int32)
+    x = 0
+    y = -r
+    # Draw the first 4 points that lie on the quadrants.
+    points[:4] = np.array([[0, -r], [-r, 0], [0, r], [r, 0]], dtype=np.int32)
+    x += 1
+    n = 4
+    while x < -y:
+        # Make use of the 8-way symmetry of the circle.
+        points[n : n + 8] = np.array(
+            [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]], dtype=np.int32
+        )
+        n += 8
+        # Test if we're currently inside or outside the circle.
+        if x**2 + y**2 - r**2 <= 0:
+            # We're inside so move right.
+            x += 1
+        else:
+            # We're outside so move up.
+            y += 1
+            if not four_connected:
+                # If we don't require 4-connected pixels then we can move diagonally.
+                x += 1
+
+    if y == -x:
+        points[n : n + 4] = np.array([[x, y], [-x, -y], [-x, y], [x, -y]], dtype=np.int32)
+        n += 4
+    return points[:n]
