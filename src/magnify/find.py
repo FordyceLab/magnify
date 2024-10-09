@@ -641,6 +641,13 @@ def regress_clusters(
     num_clusters: int,
     ideal_num_points: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if num_clusters == 1:
+        # If we only have a single cluster then we can't average regression results.
+        if len(x) == 1:
+            return 0, y
+        else:
+            return scipy.stats.linregress(x, y)[:2]
+
     # Find the best line per-cluster.
     slopes = np.full(num_clusters, np.nan)
     intercepts = np.full(num_clusters, np.nan)
@@ -745,7 +752,7 @@ def find_circles(
     start = 0
     scores = []
     for radius in range(min_radius, max_radius + 1):
-        perimeter_coords = circle_points(radius)
+        perimeter_coords = utils.circle_points(radius)
         end = np.searchsorted(circles[:, 2], radius + 1)
         s = mean_grad(thetas, edges, circles[start:end, :2], perimeter_coords)
         scores.append(s / len(perimeter_coords))
@@ -788,7 +795,7 @@ def mean_grad(thetas, edges, circles, perimeter_coords):
 @numba.njit  # (parallel=True)
 def filter_neighbors(circles, min_dist):
     # TODO: Make this function nicer.
-    coords = circle_points(min_dist, four_connected=True)
+    coords = utils.circle_points(min_dist, four_connected=True)
 
     pad = 2 * min_dist + 1
     arr = -np.ones((circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32)
@@ -896,7 +903,7 @@ def circle_labels(circles, num_rows, num_cols):
     labels = -1 * np.ones((num_rows, num_cols), dtype=np.int32)
 
     for i in range(len(circles)):
-        pts = filled_circle_points(circles[i, 2])
+        pts = utils.filled_circle_points(circles[i, 2])
         pts += circles[i, :2]
         for j in prange(len(pts)):
             r, c = pts[j]
@@ -907,65 +914,3 @@ def circle_labels(circles, num_rows, num_cols):
                     labels[r, c] = i
 
     return labels
-
-
-@numba.njit
-def filled_circle_points(r):
-    size = 2 * r + 1
-    arr = np.zeros((size, size), dtype=np.uint8)
-    pts = np.zeros((size**2, 2), dtype=np.int32)
-    perimeter = circle_points(r)
-    n = len(perimeter)
-    pts[:n] = perimeter
-
-    for i in range(n):
-        arr[pts[i, 0] + r, pts[i, 1] + r] = 1
-
-    for i in range(0, 2 * r + 1):
-        j = 0
-        while not arr[i, j]:
-            j += 1
-        while arr[i, j]:
-            j += 1
-        if j <= r:
-            while not arr[i, j]:
-                pts[n, 0] = i - r
-                pts[n, 1] = j - r
-                n += 1
-                j += 1
-
-    return pts[:n]
-
-
-@numba.njit
-def circle_points(r, four_connected=False):
-    # Draw a circle using the Breseham circle algorithm
-    # see: https://funloop.org/post/2021-03-15-bresenham-circle-drawing-algorithm.html
-    points = np.zeros((20 * r, 2), dtype=np.int32)
-    x = 0
-    y = -r
-    # Draw the first 4 points that lie on the quadrants.
-    points[:4] = np.array([[0, -r], [-r, 0], [0, r], [r, 0]], dtype=np.int32)
-    x += 1
-    n = 4
-    while x < -y:
-        # Make use of the 8-way symmetry of the circle.
-        points[n : n + 8] = np.array(
-            [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]], dtype=np.int32
-        )
-        n += 8
-        # Test if we're currently inside or outside the circle.
-        if x**2 + y**2 - r**2 <= 0:
-            # We're inside so move right.
-            x += 1
-        else:
-            # We're outside so move up.
-            y += 1
-            if not four_connected:
-                # If we don't require 4-connected pixels then we can move diagonally.
-                x += 1
-
-    if y == -x:
-        points[n : n + 4] = np.array([[x, y], [-x, -y], [-x, y], [x, -y]], dtype=np.int32)
-        n += 4
-    return points[:n]
