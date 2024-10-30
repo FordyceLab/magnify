@@ -8,7 +8,6 @@ from qtpy.QtCore import QEventLoop, Qt
 from qtpy.QtWidgets import QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 
-
 def continue_button_event(viewer, loop):
     viewer.close()
     loop.quit()
