@@ -13,6 +13,7 @@ from numba import prange
 
 import magnify.registry as registry
 from magnify import logger, utils
+from magnify.plot.vis import display_edge_detection
 
 
 class ButtonFinder:
@@ -717,8 +718,10 @@ def find_circles(
         threshold2=high_thresh,
         L2gradient=True,
     )
+    edges = display_edge_detection(img, edges, low_edge_quantile, high_edge_quantile, dx, dy)
     edges[edges != 0] = 1
     logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
+
 
     # Step 3: Use edges to find candidate circles.
     circles = candidate_circles(edges, grid_length, num_iter)
