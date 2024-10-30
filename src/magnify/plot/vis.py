@@ -1,15 +1,12 @@
-import numbers
 
 import cv2 as cv
 import napari
 import napari.settings
 import napari.utils
 import numpy as np
-import xarray as xr
 from qtpy.QtCore import QEventLoop, Qt
 from qtpy.QtWidgets import QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
-import magnify.utils as utils
 
 
 def continue_button_event(viewer, loop):
