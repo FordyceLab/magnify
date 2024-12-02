@@ -29,8 +29,7 @@ scikit-learn = ">=1.2.0"
 numba = ">=0.58.1"
 matplotlib = ">=3.9.0"
 napari = ">=0.4.16"
-pyqt5 = ">=5.15.0"
-pyqt5-sip = ">=12.11.0"
+PyQt5 = ">=5.13.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.0.1"
