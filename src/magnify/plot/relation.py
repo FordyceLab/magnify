@@ -67,7 +67,10 @@ def exp_linear_fit(x, y):
         x,
         y,
         p0=(max(y[0] - y[-1], 0), 2e-4, max((y[-5] - y[-1]) / 10000, 0), y[0]),
-        bounds=((max((y[0] - y[-1]) / 2, 0), 0.0, 0.0, 0.0), (np.inf, 0.1, np.inf, np.inf)),
+        bounds=(
+            (max((y[0] - y[-1]) / 2, 0), 0.0, 0.0, 0.0),
+            (np.inf, 0.1, np.inf, np.inf),
+        ),
         jac=jac,
     )
     return func(x, *theta)

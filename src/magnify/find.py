@@ -32,7 +32,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
-        vis_pipe: bool = False
+        vis_pipe: bool = False,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -46,7 +46,9 @@ class ButtonFinder:
         self.roi_length = roi_length
         self.progress_bar = progress_bar
         self.vis_pipe = vis_pipe
-        self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
+        self.search_timesteps = (
+            sorted(utils.to_list(search_timestep)) if search_timestep else [0]
+        )
         self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
@@ -83,7 +85,10 @@ class ButtonFinder:
                 self.roi_length,
             ),
         )
-        assay["roi"] = (("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"), roi)
+        assay["roi"] = (
+            ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
+            roi,
+        )
         assay = assay.assign_coords(
             fg=(
                 ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
@@ -176,10 +181,14 @@ class ButtonFinder:
             assay["roi"] = assay.roi.persist()
             assay["fg"] = assay.fg.persist()
             assay["bg"] = assay.bg.persist()
-        assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose("mark", ...)
+        assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose(
+            "mark", ...
+        )
         # Rechunk the array to chunk along markers since users will usually want to slice along that dimension.
         mark_chunk_size = min(
-            math.ceil(chunk_bytes / (roi_bytes * assay.sizes["time"] * assay.sizes["channel"])),
+            math.ceil(
+                chunk_bytes / (roi_bytes * assay.sizes["time"] * assay.sizes["channel"])
+            ),
             num_rows,
         )
         chunk_sizes = [
@@ -198,7 +207,9 @@ class ButtonFinder:
 
     def find_centers(self, images: xr.DataArray, assay: xr.Dataset):
         points = np.empty((0, 2))
-        min_button_dist = round(min(self.row_dist, self.col_dist) / 2 - self.max_button_radius)
+        min_button_dist = round(
+            min(self.row_dist, self.col_dist) / 2 - self.max_button_radius
+        )
         if min_button_dist % 2 == 0:
             # Certain opencv functions require an odd blocksize.
             min_button_dist -= 1
@@ -219,7 +230,9 @@ class ButtonFinder:
 
             if len(points) > 0:
                 # Remove points too close to other points in previous channels.
-                dist_matrix = np.linalg.norm(points[np.newaxis] - new_points[:, np.newaxis], axis=2)
+                dist_matrix = np.linalg.norm(
+                    points[np.newaxis] - new_points[:, np.newaxis], axis=2
+                )
                 new_points = new_points[np.min(dist_matrix, axis=1) > min_button_dist]
 
             # Add the new points to the list of seen points.
@@ -257,7 +270,11 @@ class ButtonFinder:
 
         # Step 4: Draw lines through each cluster.
         row_slope, row_intercepts = regress_clusters(
-            x, y, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
+            x,
+            y,
+            labels=row_labels,
+            num_clusters=num_rows,
+            ideal_num_points=points_per_row,
         )
         # We treat column indices as y and row indices as x to avoid near-infinite slopes.
         col_slope, col_intercepts = regress_clusters(
@@ -269,9 +286,9 @@ class ButtonFinder:
         )
 
         # Step 5: Set button locations as the intersection of each line pair.
-        mark_y = (row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]) / (
-            1 - row_slope * col_slope
-        )
+        mark_y = (
+            row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]
+        ) / (1 - row_slope * col_slope)
         mark_x = mark_y * col_slope + col_intercepts[np.newaxis]
 
         return mark_x, mark_y
@@ -310,7 +327,9 @@ class ButtonFinder:
                 if tag[i, j] != "":
                     for channel in search_channel_idxs:
                         subimage = roi[i, j, channel]
-                        subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
+                        subimage = utils.to_uint8(
+                            np.clip(subimage, np.median(subimage), None)
+                        )
                         subimage -= subimage.min()
                         circles, scores = find_circles(
                             subimage,
@@ -389,7 +408,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
-        vis_pipe: bool = False
+        vis_pipe: bool = False,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -405,7 +424,7 @@ class ButtonFinder:
             progress_bar=progress_bar,
             search_timestep=search_timestep,
             search_channel=search_channel,
-            vis_pipe=vis_pipe
+            vis_pipe=vis_pipe,
         )
 
 
@@ -420,7 +439,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
-        vis_pipe: bool = False
+        vis_pipe: bool = False,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
@@ -439,7 +458,9 @@ class BeadFinder:
         beads = np.empty((0, 3))
         for t in assay.time:
             for search_channel in self.search_channels:
-                image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
+                image = utils.to_uint8(
+                    assay.image.sel(channel=search_channel, time=t).to_numpy()
+                )
                 b = find_circles(
                     image,
                     low_edge_quantile=self.low_edge_quantile,
@@ -450,16 +471,16 @@ class BeadFinder:
                     max_radius=self.max_bead_radius,
                     min_dist=2 * self.min_bead_radius,
                     min_roundness=self.min_roundness,
-                    vis_pipe=self.vis_pipe
+                    vis_pipe=self.vis_pipe,
                 )[0]
                 if len(beads) > 0:
                     # Exclude beads that we've already seen.
                     duplicates = np.array(
                         [
                             len(neighbors) > 0
-                            for neighbors in scipy.spatial.KDTree(beads[:, :2]).query_ball_point(
-                                b[:, :2], 2 * self.min_bead_radius
-                            )
+                            for neighbors in scipy.spatial.KDTree(
+                                beads[:, :2]
+                            ).query_ball_point(b[:, :2], 2 * self.min_bead_radius)
                         ]
                     )
                     b = b[~duplicates]
@@ -484,7 +505,8 @@ class BeadFinder:
             chunks=(
                 min(
                     math.ceil(
-                        chunk_bytes / (roi_bytes * assay.sizes["channel"] * assay.sizes["time"])
+                        chunk_bytes
+                        / (roi_bytes * assay.sizes["channel"] * assay.sizes["time"])
                     ),
                     num_beads,
                 ),
@@ -516,7 +538,9 @@ class BeadFinder:
         )
 
         # Create a label array that contains the areas owned by each bead.
-        labels = circle_labels(beads.astype(int), assay.sizes["im_y"], assay.sizes["im_x"])
+        labels = circle_labels(
+            beads.astype(int), assay.sizes["im_y"], assay.sizes["im_x"]
+        )
 
         # Compute the foreground and background masks for all buttons.
         # TODO: Don't assume beads don't move across timesteps.
@@ -580,7 +604,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
-        vis_pipe: bool = False
+        vis_pipe: bool = False,
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
@@ -591,7 +615,7 @@ class BeadFinder:
             min_roundness=min_roundness,
             roi_length=roi_length,
             search_channel=search_channel,
-            vis_pipe=vis_pipe
+            vis_pipe=vis_pipe,
         )
 
 
@@ -688,7 +712,9 @@ def regress_clusters(
     for i, (x, y) in enumerate(cluster_points):
         if ideal_num_points[i] != 0 and not_nan[i]:
             weight = min(len(x), ideal_num_points[i]) / ideal_num_points[i]
-            intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)
+            intercepts[i] = weight * intercepts[i] + (1 - weight) * (
+                intercept_m * i + intercept_b
+            )
         else:
             # Just use our global estimate when we have an empty cluster.
             intercepts[i] = intercept_m * i + intercept_b
@@ -706,7 +732,7 @@ def find_circles(
     max_radius: int,
     min_roundness: float,
     min_dist: int,
-    vis_pipe: bool
+    vis_pipe: bool,
 ):
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
@@ -728,10 +754,11 @@ def find_circles(
         L2gradient=True,
     )
     if vis_pipe:
-        edges = display_edge_detection(img, edges, low_edge_quantile, high_edge_quantile, dx, dy)
+        edges = display_edge_detection(
+            img, edges, low_edge_quantile, high_edge_quantile, dx, dy
+        )
     edges[edges != 0] = 1
     logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
-
 
     # Step 3: Use edges to find candidate circles.
     circles = candidate_circles(edges, grid_length, num_iter)
@@ -811,7 +838,9 @@ def filter_neighbors(circles, min_dist):
     coords = utils.circle_points(min_dist, four_connected=True)
 
     pad = 2 * min_dist + 1
-    arr = -np.ones((circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32)
+    arr = -np.ones(
+        (circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32
+    )
     valid = np.ones(len(circles), dtype=np.bool_)
     for i in range(len(circles)):
         for j in prange(len(coords)):
@@ -888,7 +917,8 @@ def grid_array(arr, grid_length):
     for i in range(num_rows):
         for j in range(num_cols):
             grid_counts[i, j] = arr[
-                i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                i * grid_length : (i + 1) * grid_length,
+                j * grid_length : (j + 1) * grid_length,
             ].sum()
 
     # The number of edges in each grid cell is variable in length so we'll store
@@ -900,7 +930,8 @@ def grid_array(arr, grid_length):
         for j in range(num_cols):
             r, c = np.where(
                 arr[
-                    i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                    i * grid_length : (i + 1) * grid_length,
+                    j * grid_length : (j + 1) * grid_length,
                 ]
             )
             grid_starts[i, j] = n

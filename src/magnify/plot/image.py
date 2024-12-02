@@ -13,7 +13,9 @@ def roishow(xp: xr.Dataset):
     # TODO: This entire section doesn't handle images with time dimensions correctly.
     tags, counts = np.unique(xp.tag.to_numpy(), return_counts=True)
     roi = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0).shape)
-    fg = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0, channel=0).shape, dtype=bool)
+    fg = np.zeros(
+        (counts.max(), len(tags)) + xp.roi.isel(mark=0, channel=0).shape, dtype=bool
+    )
     bg = np.zeros_like(fg)
     for i, (tag, group) in enumerate(xp.roi.groupby("tag")):
         roi[: group.sizes["mark"], i] = group
@@ -22,7 +24,9 @@ def roishow(xp: xr.Dataset):
 
     if "channel" in xp.roi.dims:
         viewer = napari.imshow(
-            roi, channel_axis=xp.roi.dims.index("channel") + 1, name=xp.roi.channel.to_numpy()
+            roi,
+            channel_axis=xp.roi.dims.index("channel") + 1,
+            name=xp.roi.channel.to_numpy(),
         )[0]
     else:
         viewer = napari.imshow(roi)[0]
@@ -67,10 +71,16 @@ def imshow(xp: xr.Dataset):
 
         roi_stack = roi_stack.transpose("mark", "extra_dims", "roi_y", "roi_x")
         fg_labels = np.zeros(
-            (roi_stack.sizes["extra_dims"], xp.sizes["im_y"], xp.sizes["im_x"]), dtype=int
+            (roi_stack.sizes["extra_dims"], xp.sizes["im_y"], xp.sizes["im_x"]),
+            dtype=int,
         )
         roi_contours = np.zeros(
-            (roi_stack.sizes["mark"], roi_stack.sizes["extra_dims"], 4, len(extra_dims) + 2),
+            (
+                roi_stack.sizes["mark"],
+                roi_stack.sizes["extra_dims"],
+                4,
+                len(extra_dims) + 2,
+            ),
             dtype=int,
         )
         for i, mark in enumerate(roi_stack.mark):
@@ -87,7 +97,8 @@ def imshow(xp: xr.Dataset):
                 # Set the roi bounding box.
                 roi_contours[i, j, :, :-2] = np.unravel_index(j, extra_dim_shape)
                 roi_contours[i, j, :, -2:] = np.array(
-                    [[top, left], [top, right], [bottom, right], [bottom, left]], dtype=int
+                    [[top, left], [top, right], [bottom, right], [bottom, left]],
+                    dtype=int,
                 )
                 # Set the foreground label in image coordinates.
                 fg = m.fg.to_numpy()
@@ -97,7 +108,10 @@ def imshow(xp: xr.Dataset):
 
         fg_labels = fg_labels.reshape(img.shape)
         roi_contours = roi_contours.reshape(-1, 4, len(extra_dims) + 2)
-        props = {"mark": [f"{mark.item()}" for mark in xp.mark], "tag": list(xp.tag.to_numpy())}
+        props = {
+            "mark": [f"{mark.item()}" for mark in xp.mark],
+            "tag": list(xp.tag.to_numpy()),
+        }
         viewer.add_labels(
             fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
         )

@@ -14,7 +14,9 @@ import magnify.utils as utils
 
 class Pipeline:
     def __init__(self, reader: str, config: dict[str, dict[str, str]]):
-        self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(reader)()
+        self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(
+            reader
+        )()
         self.config = confection.Config(config)
         self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
 
@@ -51,7 +53,9 @@ class Pipeline:
         last: bool = False,
     ) -> None:
         component_factory = registry.components.get(name)
-        component = component_factory(**utils.valid_kwargs(self.config, component_factory))
+        component = component_factory(
+            **utils.valid_kwargs(self.config, component_factory)
+        )
 
         if after is None and before is None and not first and not last:
             last = True

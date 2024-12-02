@@ -24,7 +24,9 @@ def component(name):
 
         # Make the factory signature identical to func's except for the first argument.
         signature = inspect.signature(func)
-        signature = signature.replace(parameters=list(signature.parameters.values())[1:])
+        signature = signature.replace(
+            parameters=list(signature.parameters.values())[1:]
+        )
         component_factory.__signature__ = signature
         components.register(name)(component_factory)
         return func
@@ -58,7 +60,7 @@ def mini_chip(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False
+    vis_pipe: bool = False,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find buttons in minichip images and standardize the resulting data in an xarray.Dataset
@@ -173,7 +175,7 @@ def mini_chip(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
-        vis_pipe=vis_pipe
+        vis_pipe=vis_pipe,
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -201,7 +203,7 @@ def mini_chip_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False
+    vis_pipe: bool = False,
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect buttons in minichip images and standardize the resulting data in an xarray.Dataset.
@@ -799,7 +801,7 @@ def mrbles(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False
+    vis_pipe: bool = False,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find MRBLEs(Microspheres with Ratiometric Barcode Lanthanide Encoding Beaads) in images and standardize the resulting data in an xarray.Dataset.
@@ -904,7 +906,7 @@ def mrbles(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
-        vis_pipe=vis_pipe
+        vis_pipe=vis_pipe,
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -928,7 +930,7 @@ def mrbles_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False
+    vis_pipe: bool = False,
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect MRBLEs(Microspheres with Ratiometric Barcode Lanthanide Encoding Beaads) in images and standardize the resulting data in an xarray.Dataset.
@@ -1014,7 +1016,7 @@ def beads(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False
+    vis_pipe: bool = False,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find beads in images and standardize the resulting data in an xarray.Dataset.
@@ -1110,7 +1112,7 @@ def beads(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
-        vis_pipe=vis_pipe
+        vis_pipe=vis_pipe,
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -1131,7 +1133,7 @@ def beads_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False
+    vis_pipe: bool = False,
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect beads in images and standardize the resulting data in an xarray.Dataset.
