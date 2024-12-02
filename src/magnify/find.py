@@ -120,7 +120,7 @@ class ButtonFinder:
             images = assay.image.isel(time=t).compute()
             # Find button centers.
             assay.x[..., t], assay.y[..., t] = self.find_centers(
-                images.sel(channel=self.search_channels), assay
+                images.sel(channel=self.search_channels), assay, self.vis_pipe
             )
 
             # Compute the roi, foreground and background masks for all buttons.
@@ -205,7 +205,7 @@ class ButtonFinder:
 
         return assay
 
-    def find_centers(self, images: xr.DataArray, assay: xr.Dataset):
+    def find_centers(self, images: xr.DataArray, assay: xr.Dataset, vis_pipe: bool):
         points = np.empty((0, 2))
         min_button_dist = round(
             min(self.row_dist, self.col_dist) / 2 - self.max_button_radius
@@ -226,6 +226,7 @@ class ButtonFinder:
                 max_radius=self.max_button_radius,
                 min_dist=min_button_dist,
                 min_roundness=self.min_roundness,
+                vis_pipe=vis_pipe
             )[0][:, :2]
 
             if len(points) > 0:
@@ -343,6 +344,7 @@ class ButtonFinder:
                             max_radius=self.max_button_radius,
                             min_dist=0,
                             min_roundness=self.min_roundness,
+                            vis_pipe=self.vis_pipe
                         )
                         if len(circles) > 0:
                             scores = scores
