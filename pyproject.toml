@@ -28,6 +28,7 @@ confection = ">=0.0.4"
 scikit-learn = ">=1.2.0"
 numba = ">=0.58.1"
 matplotlib = ">=3.9.0"
+napari = ">=0.4.16"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.0.1"
