@@ -58,6 +58,7 @@ def mini_chip(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    vis_pipe: bool = False
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find buttons in minichip images and standardize the resulting data in an xarray.Dataset
@@ -172,6 +173,7 @@ def mini_chip(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
+        vis_pipe=vis_pipe
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -199,6 +201,7 @@ def mini_chip_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    vis_pipe: bool = False
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect buttons in minichip images and standardize the resulting data in an xarray.Dataset.
@@ -796,6 +799,7 @@ def mrbles(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    vis_pipe: bool = False
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find MRBLEs(Microspheres with Ratiometric Barcode Lanthanide Encoding Beaads) in images and standardize the resulting data in an xarray.Dataset.
@@ -855,6 +859,8 @@ def mrbles(
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
+    vis_pipe :
+        If set to True, a user interface will appear, allowing you to manually adjust parameter values and observe their effects in real-time.
 
     Returns
     -------
@@ -898,6 +904,7 @@ def mrbles(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
+        vis_pipe=vis_pipe
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -921,6 +928,7 @@ def mrbles_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    vis_pipe: bool = False
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect MRBLEs(Microspheres with Ratiometric Barcode Lanthanide Encoding Beaads) in images and standardize the resulting data in an xarray.Dataset.
@@ -967,6 +975,8 @@ def mrbles_pipe(
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
+    vis_pipe :
+        If set to True, a user interface will appear, allowing you to manually adjust parameter values and observe their effects in real-time.
 
     Reference
     -------
@@ -1004,6 +1014,7 @@ def beads(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    vis_pipe: bool = False
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find beads in images and standardize the resulting data in an xarray.Dataset.
@@ -1057,6 +1068,8 @@ def beads(
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
+    vis_pipe :
+        If set to True, a user interface will appear, allowing you to manually adjust parameter values and observe their effects in real-time.
 
     Returns
     -------
@@ -1097,6 +1110,7 @@ def beads(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
+        vis_pipe=vis_pipe
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -1117,6 +1131,7 @@ def beads_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    vis_pipe: bool = False
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect beads in images and standardize the resulting data in an xarray.Dataset.
@@ -1158,6 +1173,8 @@ def beads_pipe(
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
+    vis_pipe :
+        If set to True, a user interface will appear, allowing you to manually adjust parameter values and observe their effects in real-time.
 
     Reference
     -------

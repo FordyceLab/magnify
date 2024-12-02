@@ -13,7 +13,7 @@ from numba import prange
 
 import magnify.registry as registry
 from magnify import logger, utils
-from magnify.plot.vis import display_edge_detection
+from magnify.plot import display_edge_detection
 
 
 class ButtonFinder:
@@ -32,6 +32,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -44,6 +45,7 @@ class ButtonFinder:
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
+        self.vis_pipe = vis_pipe
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
 
@@ -310,7 +312,6 @@ class ButtonFinder:
                         subimage = roi[i, j, channel]
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
-                        find_circles
                         circles, scores = find_circles(
                             subimage,
                             low_edge_quantile=self.low_edge_quantile,
@@ -388,6 +389,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -403,6 +405,7 @@ class ButtonFinder:
             progress_bar=progress_bar,
             search_timestep=search_timestep,
             search_channel=search_channel,
+            vis_pipe=vis_pipe
         )
 
 
@@ -417,11 +420,13 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.low_edge_quantile = low_edge_quantile
         self.high_edge_quantile = high_edge_quantile
+        self.vis_pipe = vis_pipe
         self.num_iter = num_iter
         self.min_roundness = min_roundness
         self.roi_length = roi_length
@@ -445,6 +450,7 @@ class BeadFinder:
                     max_radius=self.max_bead_radius,
                     min_dist=2 * self.min_bead_radius,
                     min_roundness=self.min_roundness,
+                    vis_pipe=self.vis_pipe
                 )[0]
                 if len(beads) > 0:
                     # Exclude beads that we've already seen.
@@ -574,6 +580,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
@@ -584,6 +591,7 @@ class BeadFinder:
             min_roundness=min_roundness,
             roi_length=roi_length,
             search_channel=search_channel,
+            vis_pipe=vis_pipe
         )
 
 
@@ -698,6 +706,7 @@ def find_circles(
     max_radius: int,
     min_roundness: float,
     min_dist: int,
+    vis_pipe: bool
 ):
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
@@ -718,7 +727,8 @@ def find_circles(
         threshold2=high_thresh,
         L2gradient=True,
     )
-    edges = display_edge_detection(img, edges, low_edge_quantile, high_edge_quantile, dx, dy)
+    if vis_pipe:
+        edges = display_edge_detection(img, edges, low_edge_quantile, high_edge_quantile, dx, dy)
     edges[edges != 0] = 1
     logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
 
