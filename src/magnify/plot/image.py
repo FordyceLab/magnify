@@ -13,9 +13,7 @@ def roishow(xp: xr.Dataset):
     # TODO: This entire section doesn't handle images with time dimensions correctly.
     tags, counts = np.unique(xp.tag.to_numpy(), return_counts=True)
     roi = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0).shape)
-    fg = np.zeros(
-        (counts.max(), len(tags)) + xp.roi.isel(mark=0, channel=0).shape, dtype=bool
-    )
+    fg = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0, channel=0).shape, dtype=bool)
     bg = np.zeros_like(fg)
     for i, (tag, group) in enumerate(xp.roi.groupby("tag")):
         roi[: group.sizes["mark"], i] = group

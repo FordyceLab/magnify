@@ -26,17 +26,11 @@ class Reader:
 
     def __call__(
         self,
-        data: (
-            str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset]
-        ),
+        data: (str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset]),
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
-        data = (
-            [data]
-            if isinstance(data, utils.PathLike | xr.DataArray | xr.Dataset)
-            else data
-        )
+        data = [data] if isinstance(data, utils.PathLike | xr.DataArray | xr.Dataset) else data
         for d in data:
             if isinstance(d, xr.Dataset | xr.DataArray):
                 yield standardize(d)
@@ -49,9 +43,7 @@ class Reader:
                 raise FileNotFoundError(f"The pattern {d} did not lead to any files.")
 
             # None xp names should just mean a nameless experiment.
-            path_dict = {
-                ("",) + k[1:] if k[0] is None else k: v for k, v in path_dict.items()
-            }
+            path_dict = {("",) + k[1:] if k[0] is None else k: v for k, v in path_dict.items()}
             xp_names = set(list(zip(*path_dict.keys()))[0])
 
             for xp_name in sorted(xp_names, key=utils.natural_sort_key):
@@ -117,9 +109,7 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
         glob_path = re.sub(rf"\([^\(]*?_{key}.*?\)", "*", glob_path)
         # For regexes replace all named search patterns with named wildcard groups.
         regex_path = re.sub(rf"\\\({key}.*?\\\)", rf"(?P<{key}>[^/\\\]*?)", regex_path)
-        regex_path = re.sub(
-            rf"\\\(([^\(]*?)_{key}.*?\\\)", r"(?P<\1>[^/\\\]*?)", regex_path
-        )
+        regex_path = re.sub(rf"\\\(([^\(]*?)_{key}.*?\\\)", r"(?P<\1>[^/\\\]*?)", regex_path)
         # Get any associated formatting information in the named search pattern.
         key_search = re.search(rf"\({key}(?:\s*\|\s*(.*?))?\)", pattern)
         if key_search:
@@ -182,9 +172,7 @@ def read_tiffs(
     meta_dict,
 ) -> xr.Dataset:
     # Get the indices specified in the path each in sorted order.
-    channel_idxs, time_idxs, row_idxs, col_idxs = (
-        sorted(set(idx)) for idx in zip(*xp_dict.keys())
-    )
+    channel_idxs, time_idxs, row_idxs, col_idxs = (sorted(set(idx)) for idx in zip(*xp_dict.keys()))
 
     # Check which dimensions are specified in the path and compute the shape of those dimensions.
     dims_in_path = []
@@ -242,8 +230,7 @@ def read_tiffs(
                 ]
                 assert all(pl.get("DeltaTUnit") == "ms" for pl in planes)
                 times = [
-                    start_time
-                    + datetime.timedelta(milliseconds=float(pl.get("DeltaT")))
+                    start_time + datetime.timedelta(milliseconds=float(pl.get("DeltaT")))
                     for pl in planes
                 ]
                 if "channel" in dims_in_file:
@@ -271,9 +258,7 @@ def read_tiffs(
 
     # Check the dimensions specified in the path and inside the tiff file do not overlap.
     if set(dims_in_file).intersection(dims_in_path):
-        raise ValueError(
-            "Dimensions specified in the path names and inside the tiff file overlap."
-        )
+        raise ValueError("Dimensions specified in the path names and inside the tiff file overlap.")
 
     # Setup a dask array to lazyload image tiles and extract attributes.
     filenames = [x for _, x in sorted(xp_dict.items())]
@@ -290,9 +275,7 @@ def read_tiffs(
         with tifffile.TiffFile(filenames[file_idx]) as tif:
             page_ndim = len(page_shape)
             if len(inner_shape) > page_ndim:
-                page_idx = np.ravel_multi_index(
-                    inner_id[:-page_ndim], inner_shape[:-page_ndim]
-                )
+                page_idx = np.ravel_multi_index(inner_id[:-page_ndim], inner_shape[:-page_ndim])
             else:
                 # This is the case where no dimensions correspond to page dims.
                 page_idx = 0

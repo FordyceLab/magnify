@@ -16,9 +16,7 @@ class Stitcher:
             : assay.tile.shape[-1] - self.overlap,
         ]
         # Move the time and channel axes last so we can focus on joining images.
-        tiles = tiles.transpose(
-            "tile_row", "tile_col", "tile_y", "tile_x", "channel", "time"
-        )
+        tiles = tiles.transpose("tile_row", "tile_col", "tile_y", "tile_x", "channel", "time")
         tiles = xr.concat(tiles, dim="tile_y")
         images = xr.concat(tiles, dim="tile_x")
         # Change the x and y dimension names to be about the images.

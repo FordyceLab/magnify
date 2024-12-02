@@ -32,9 +32,7 @@ def warning(text, data=None):
 
 def figure():
     num_plots = len(plot_logger)
-    fig, axs = plt.subplots(
-        nrows=num_plots, squeeze=False, figsize=(10, 10 * num_plots)
-    )
+    fig, axs = plt.subplots(nrows=num_plots, squeeze=False, figsize=(10, 10 * num_plots))
     axs = axs[:, 0]
 
     for ax, title, data in zip(axs, title_logger, plot_logger):

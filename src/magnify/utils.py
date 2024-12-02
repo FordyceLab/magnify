@@ -158,8 +158,6 @@ def circle_points(r, four_connected=False):
                 x += 1
 
     if y == -x:
-        points[n : n + 4] = np.array(
-            [[x, y], [-x, -y], [-x, y], [x, -y]], dtype=np.int32
-        )
+        points[n : n + 4] = np.array([[x, y], [-x, -y], [-x, y], [x, -y]], dtype=np.int32)
         n += 4
     return points[:n]

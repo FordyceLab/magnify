@@ -52,9 +52,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
     # Read in the dataframe of lanthanide spectra and make sure the reference lanthanide is first.
     spectra_df = pd.read_csv(spectra)
     ref_idx = spectra_df[spectra_df["name"] == reference].index[0]
-    spectra_df = spectra_df.reindex(
-        [ref_idx] + [i for i in range(len(spectra_df)) if i != ref_idx]
-    )
+    spectra_df = spectra_df.reindex([ref_idx] + [i for i in range(len(spectra_df)) if i != ref_idx])
     lns = spectra_df["name"].to_list()
     num_lns = len(lns)
 
@@ -66,9 +64,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
     code_lns = set(codes_df.columns)
     code_lns.remove("name")
     if code_lns != set(lns):
-        raise ValueError(
-            f"Lanthanide names in {codes} do not match lanthanide names in {spectra}."
-        )
+        raise ValueError(f"Lanthanide names in {codes} do not match lanthanide names in {spectra}.")
 
     # Step 1: Estimate the lanthanide volumes in each bead by solving the linear equation SV = I
     # where S are the reference spectra and I are the intensities of each bead.
@@ -110,9 +106,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         A = theta[: num_lns - 1]
         p = theta[num_lns - 1 :]
         eps = 1e-8
-        dist = np.linalg.norm(
-            (A * code_ratios + p)[np.newaxis] - X_r[:, np.newaxis], axis=-1
-        )
+        dist = np.linalg.norm((A * code_ratios + p)[np.newaxis] - X_r[:, np.newaxis], axis=-1)
         # Logsumexp is a smooth approximation to the max function when eps is small.
         return -eps * np.sum(scipy.special.logsumexp(-dist / eps, axis=-1)) / len(X_r)
 
@@ -129,9 +123,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         best_p = 0
         best_cost = np.inf
         for a in np.linspace(0.75 * scale, 1.25 * scale, N):
-            for p in np.linspace(
-                points.min(), 0.25 * points.max() + 0.75 * points.min(), N
-            ):
+            for p in np.linspace(points.min(), 0.25 * points.max() + 0.75 * points.min(), N):
                 clusters = a * codes + p
                 curr_start = 0
                 for i in range(len(clusters)):
@@ -147,15 +139,12 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
                     if curr_start == j:
                         dists[i] = np.inf
                     else:
-                        dists[i] = (
-                            (points[curr_start : j + 1] - clusters[i]) ** 2
-                        ).mean()
+                        dists[i] = ((points[curr_start : j + 1] - clusters[i]) ** 2).mean()
                     sizes[i] = j - curr_start
                     curr_start = j
 
                 cost = (
-                    100 * dists.mean()
-                    + ((sizes / sizes.sum() - counts / counts.sum()) ** 2).mean()
+                    100 * dists.mean() + ((sizes / sizes.sum() - counts / counts.sum()) ** 2).mean()
                 )
                 if cost < best_cost:
                     best_a = a
@@ -210,8 +199,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
             log_cond_probs[:, :-1] = (
                 -X.shape[1] * np.log(2 * np.pi) / 2
                 - 0.5 * np.log(np.linalg.det(covs))
-                - 0.5
-                * np.einsum("...i,...ij,...j->...", diff, np.linalg.inv(covs), diff)
+                - 0.5 * np.einsum("...i,...ij,...j->...", diff, np.linalg.inv(covs), diff)
             )
         except np.linalg.LinAlgError:
             print("Warning: Code clustering did not converge.")
@@ -227,8 +215,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
         covs = (
             np.sum(
-                probs[:, :-1, np.newaxis, np.newaxis]
-                * np.einsum("...i,...j->...ij", diff, diff),
+                probs[:, :-1, np.newaxis, np.newaxis] * np.einsum("...i,...j->...ij", diff, diff),
                 axis=0,
             )
             / np.sum(probs[:, :-1], axis=0)[:, np.newaxis, np.newaxis]
@@ -243,9 +230,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         tag_idxs = np.argmax(probs, axis=1)
     else:
         tag_idxs = np.argmin(
-            np.linalg.norm(
-                X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1
-            ),
+            np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1),
             axis=1,
         )
     assay = assay.assign_coords(

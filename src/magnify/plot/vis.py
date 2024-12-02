@@ -36,9 +36,7 @@ class EdgeDetectionUI:
         self.viewer.window.add_dock_widget(cont_button, area="right")
 
         show_img_button = self.create_button("Show Image", self.toggle_image_visibility)
-        show_edges_button = self.create_button(
-            "Show Edges", self.toggle_edges_visibility
-        )
+        show_edges_button = self.create_button("Show Edges", self.toggle_edges_visibility)
         self.viewer.window.add_dock_widget(show_img_button, area="left")
         self.viewer.window.add_dock_widget(show_edges_button, area="left")
 
@@ -67,15 +65,11 @@ class EdgeDetectionUI:
 
     def toggle_image_visibility(self):
         if "Image" in self.viewer.layers:
-            self.viewer.layers["Image"].visible = not self.viewer.layers[
-                "Image"
-            ].visible
+            self.viewer.layers["Image"].visible = not self.viewer.layers["Image"].visible
 
     def toggle_edges_visibility(self):
         if "Edges" in self.viewer.layers:
-            self.viewer.layers["Edges"].visible = not self.viewer.layers[
-                "Edges"
-            ].visible
+            self.viewer.layers["Edges"].visible = not self.viewer.layers["Edges"].visible
 
     @staticmethod
     def create_button(label_text, click_event):

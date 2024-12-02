@@ -35,9 +35,7 @@ def circularize(
     bg = subassay.bg.to_numpy()
     for i in range(assay.sizes["mark"]):
         old_fg = utils.to_uint8(fg[i])
-        contour = cv.findContours(old_fg, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[0][
-            0
-        ]
+        contour = cv.findContours(old_fg, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[0][0]
         center, radius = cv.minEnclosingCircle(contour)
         fg[i] = utils.circle(
             fg.shape[-1],

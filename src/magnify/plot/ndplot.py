@@ -33,9 +33,7 @@ def ndplot(
             )
             for i in range(len(sub_xp[facet_row])):
                 for j in range(len(sub_xp[facet_col])):
-                    traces = plot_function(
-                        sub_xp.isel({facet_row: i, facet_col: j}), **kwargs
-                    )
+                    traces = plot_function(sub_xp.isel({facet_row: i, facet_col: j}), **kwargs)
                     for trace in traces:
                         fig.add_trace(
                             trace,

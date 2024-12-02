@@ -28,9 +28,7 @@ def filter_expression(
             # Compute the intensity differences between every pair of backgrounds on the first timestep.
             bg_n = bg.to_numpy().flatten()
             diffs = bg_n[:, np.newaxis] - bg_n[np.newaxis, :]
-            offdiag = np.ones_like(diffs, dtype=bool) & (
-                ~np.eye(len(diffs), dtype=bool)
-            )
+            offdiag = np.ones_like(diffs, dtype=bool) & (~np.eye(len(diffs), dtype=bool))
             diffs = diffs[offdiag]
 
             # Include any markers where the fg - bg is above 5 sigma of the mean difference.
@@ -60,9 +58,7 @@ def filter_nonround(
         fg = utils.to_uint8(subassay.fg.to_numpy())
         areas = subassay.fg.sum(dim=["roi_x", "roi_y"]).to_numpy()
         for i in range(assay.sizes["mark"]):
-            contours, _ = cv.findContours(
-                fg[i], cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
-            )
+            contours, _ = cv.findContours(fg[i], cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             perimeter = sum(cv.arcLength(c, True) for c in contours)
             if perimeter == 0:
                 assay.valid[i] = False
@@ -75,9 +71,7 @@ def filter_nonround(
 
 
 @registry.component("filter_leaky")
-def filter_leaky_buttons(
-    assay: xr.Dataset, search_channel: str | list[str] | None = None
-):
+def filter_leaky_buttons(assay: xr.Dataset, search_channel: str | list[str] | None = None):
     if search_channel is None:
         search_channels = assay.channel
     else:
