@@ -13,6 +13,7 @@ from numba import prange
 
 import magnify.registry as registry
 from magnify import logger, utils
+from magnify.plot import display_edge_detection
 
 
 class ButtonFinder:
@@ -31,6 +32,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -43,6 +45,7 @@ class ButtonFinder:
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
+        self.vis_pipe = vis_pipe
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
 
@@ -80,7 +83,10 @@ class ButtonFinder:
                 self.roi_length,
             ),
         )
-        assay["roi"] = (("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"), roi)
+        assay["roi"] = (
+            ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
+            roi,
+        )
         assay = assay.assign_coords(
             fg=(
                 ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
@@ -112,7 +118,7 @@ class ButtonFinder:
             images = assay.image.isel(time=t).compute()
             # Find button centers.
             assay.x[..., t], assay.y[..., t] = self.find_centers(
-                images.sel(channel=self.search_channels), assay
+                images.sel(channel=self.search_channels), assay, self.vis_pipe
             )
 
             # Compute the roi, foreground and background masks for all buttons.
@@ -193,7 +199,7 @@ class ButtonFinder:
 
         return assay
 
-    def find_centers(self, images: xr.DataArray, assay: xr.Dataset):
+    def find_centers(self, images: xr.DataArray, assay: xr.Dataset, vis_pipe: bool):
         points = np.empty((0, 2))
         min_button_dist = round(min(self.row_dist, self.col_dist) / 2 - self.max_button_radius)
         if min_button_dist % 2 == 0:
@@ -212,6 +218,7 @@ class ButtonFinder:
                 max_radius=self.max_button_radius,
                 min_dist=min_button_dist,
                 min_roundness=self.min_roundness,
+                vis_pipe=vis_pipe,
             )[0][:, :2]
 
             if len(points) > 0:
@@ -254,7 +261,11 @@ class ButtonFinder:
 
         # Step 4: Draw lines through each cluster.
         row_slope, row_intercepts = regress_clusters(
-            x, y, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
+            x,
+            y,
+            labels=row_labels,
+            num_clusters=num_rows,
+            ideal_num_points=points_per_row,
         )
         # We treat column indices as y and row indices as x to avoid near-infinite slopes.
         col_slope, col_intercepts = regress_clusters(
@@ -309,7 +320,6 @@ class ButtonFinder:
                         subimage = roi[i, j, channel]
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
-                        find_circles
                         circles, scores = find_circles(
                             subimage,
                             low_edge_quantile=self.low_edge_quantile,
@@ -322,6 +332,7 @@ class ButtonFinder:
                             max_radius=self.max_button_radius,
                             min_dist=0,
                             min_roundness=self.min_roundness,
+                            vis_pipe=self.vis_pipe,
                         )
                         if len(circles) > 0:
                             scores = scores
@@ -387,6 +398,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -402,6 +414,7 @@ class ButtonFinder:
             progress_bar=progress_bar,
             search_timestep=search_timestep,
             search_channel=search_channel,
+            vis_pipe=vis_pipe,
         )
 
 
@@ -416,11 +429,13 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
         self.low_edge_quantile = low_edge_quantile
         self.high_edge_quantile = high_edge_quantile
+        self.vis_pipe = vis_pipe
         self.num_iter = num_iter
         self.min_roundness = min_roundness
         self.roi_length = roi_length
@@ -444,6 +459,7 @@ class BeadFinder:
                     max_radius=self.max_bead_radius,
                     min_dist=2 * self.min_bead_radius,
                     min_roundness=self.min_roundness,
+                    vis_pipe=self.vis_pipe,
                 )[0]
                 if len(beads) > 0:
                     # Exclude beads that we've already seen.
@@ -573,6 +589,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False,
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
@@ -583,6 +600,7 @@ class BeadFinder:
             min_roundness=min_roundness,
             roi_length=roi_length,
             search_channel=search_channel,
+            vis_pipe=vis_pipe,
         )
 
 
@@ -697,6 +715,7 @@ def find_circles(
     max_radius: int,
     min_roundness: float,
     min_dist: int,
+    vis_pipe: bool,
 ):
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
@@ -717,6 +736,8 @@ def find_circles(
         threshold2=high_thresh,
         L2gradient=True,
     )
+    if vis_pipe:
+        edges = display_edge_detection(img, edges, low_edge_quantile, high_edge_quantile, dx, dy)
     edges[edges != 0] = 1
     logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
 
@@ -875,7 +896,8 @@ def grid_array(arr, grid_length):
     for i in range(num_rows):
         for j in range(num_cols):
             grid_counts[i, j] = arr[
-                i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                i * grid_length : (i + 1) * grid_length,
+                j * grid_length : (j + 1) * grid_length,
             ].sum()
 
     # The number of edges in each grid cell is variable in length so we'll store
@@ -887,7 +909,8 @@ def grid_array(arr, grid_length):
         for j in range(num_cols):
             r, c = np.where(
                 arr[
-                    i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                    i * grid_length : (i + 1) * grid_length,
+                    j * grid_length : (j + 1) * grid_length,
                 ]
             )
             grid_starts[i, j] = n

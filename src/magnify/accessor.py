@@ -22,7 +22,11 @@ class MagnifyAccessor:
         for name, arr in arrays.items():
             if isinstance(arr.data, da.Array):
                 arr.data = da.to_zarr(
-                    arr.data, url=self._tempdir, component=name, return_stored=True, overwrite=True
+                    arr.data,
+                    url=self._tempdir,
+                    component=name,
+                    return_stored=True,
+                    overwrite=True,
                 )
 
         return self._obj
