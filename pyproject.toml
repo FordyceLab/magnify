@@ -1,46 +1,52 @@
-[tool.poetry]
+[project]
 name = "magnify"
 version = "0.10.0"
 description = "A microscopy image processing toolkit."
-authors = ["Karl Krauth <karl.krauth@gmail.com>"]
-readme = "README.md"
-
-[tool.poetry.dependencies]
-python = ">=3.9, <3.13"
-opencv-python = [
-    { version = ">=4.0", markers = "sys_platform != 'darwin'" },
-    { version = ">=4.0, !=4.7.0.68", markers = "sys_platform == 'darwin'" }
+authors = [
+    {name = "Karl Krauth", email = "karl.krauth@gmail.com"},
 ]
-numpy = ">=1.22.0"
-scipy = ">=1.9.0"
-pandas = ">=2.0.3"
-plotly = ">=5.18.0"
-tifffile = ">=2021.11.2"
-dask_image = ">=2024.5.3"
-tqdm = ">=4.64"
-types-tqdm = ">=4.64"
-xarray = {extras = ["io"], version = ">=2023.01.0"}
-dask = {extras = ["complete"], version = ">=2022.02.0"}
-catalogue = ">=2.0.8"
-beautifulsoup4 = ">=4.10.0"
-lxml = ">=5.0.0"
-confection = ">=0.0.4"
-scikit-learn = ">=1.2.0"
-numba = ">=0.58.1"
-matplotlib = ">=3.9.0"
+readme = "README.md"
+requires-python = ">=3.9, <3.13"
 
-[tool.poetry.group.dev.dependencies]
-mypy = "^1.0.1"
-pre-commit = "^4.0.0"
-pytest = ">=7.1.2"
-ruff = ">=0.0.249"
-sphinx = "^5.0.2"
-sphinx-autodoc-typehints = "^1.22"
-sphinx-press-theme = ">=0.8.0"
+dependencies = [
+    "opencv-python>=4.0; sys_platform != 'darwin'",
+    "opencv-python>=4.0,!=4.7.0.68; sys_platform == 'darwin'",
+    "numpy>=1.22.0",
+    "scipy>=1.9.0",
+    "pandas>=2.0.3",
+    "plotly>=5.18.0",
+    "tifffile>=2021.11.2",
+    "dask_image>=2024.5.3",
+    "tqdm>=4.64",
+    "types-tqdm>=4.64",
+    "xarray[io]>=2023.01.0",
+    "dask[complete]>=2022.02.0",
+    "catalogue>=2.0.8",
+    "beautifulsoup4>=4.10.0",
+    "lxml>=5.0.0",
+    "confection>=0.0.4",
+    "scikit-learn>=1.2.0",
+    "numba>=0.58.1",
+    "matplotlib>=3.9.0",
+    "seaborn>=0.13.0",
+    "napari>=0.4.16",
+    "pyqt5==5.15.10"
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy==1.0.1",
+    "pre-commit==4.0.0",
+    "pytest>=7.1.2",
+    "ruff>=0.0.249",
+    "sphinx==5.0.2",
+    "sphinx-autodoc-typehints==1.22",
+    "sphinx-press-theme>=0.8.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 100
@@ -51,26 +57,15 @@ docstring-code-format = true
 
 [tool.mypy]
 python_version = "3.10"
-
-# Disallow untyped definitions.
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
 disallow_untyped_decorators = true
-
-# None and optional handling
 no_implicit_optional = true
-
-# Configuring warnings
 warn_unused_ignores = true
 warn_no_return = true
 warn_return_any = true
 warn_redundant_casts = true
-
-# Misc things
 strict_equality = true
-
-# Config file
 warn_unused_configs = true
-
 ignore_missing_imports = true
