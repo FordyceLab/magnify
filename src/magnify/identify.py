@@ -90,8 +90,8 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         .query(X, k=[n_neighbor], workers=-1)[0]
         .flatten()
     )
-    # We care more about excluding all outliers so exclude 5% of points.
-    X_r = X[dist <= np.percentile(dist, 95)]
+    # We care more about excluding all outliers so exclude 20% of points.
+    X_r = X[dist <= np.percentile(dist, 80)]
 
     # Step 3: Find an affine transformation of the code's lanthanide ratios to get a clustering
     # that minimizes the distance between each bead and its closest code.
