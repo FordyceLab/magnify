@@ -36,4 +36,5 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          uv run pytest tests
+          uv venv
+          uv pytest tests
