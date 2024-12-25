@@ -34,7 +34,7 @@ dependencies = [
     "pyqt5==5.15.10"
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "mypy==1.0.1",
     "pre-commit==4.0.0",
