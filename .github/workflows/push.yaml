@@ -31,9 +31,4 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            source .venv/Scripts/activate
-          else
-            source .venv/bin/activate
-          fi
           pytest tests
