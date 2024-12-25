@@ -28,7 +28,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - name: Run tests
+      - name: Install dependencies
         shell: bash
         run: |
-          pytest tests
+          uv venv
+          uv run pytest
