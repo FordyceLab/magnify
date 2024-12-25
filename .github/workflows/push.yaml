@@ -32,4 +32,13 @@ jobs:
         shell: bash
         run: |
           uv venv
-          uv run -i pytest
+          uv pip install -e ".[dev]"
+      - name: Run tests
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
+          pytest tests
