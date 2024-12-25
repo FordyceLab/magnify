@@ -32,4 +32,4 @@ jobs:
         shell: bash
         run: |
           uv venv
-          uv run pytest
+          uv run -i pytest
