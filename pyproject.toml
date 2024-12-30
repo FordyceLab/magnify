@@ -30,8 +30,7 @@ dependencies = [
     "numba>=0.58.1",
     "matplotlib>=3.9.0",
     "seaborn>=0.13.0",
-    "napari>=0.4.16",
-    "pyqt5==5.15.10"
+    "napari>=0.4.16"
 ]
 
 [dependency-groups]
