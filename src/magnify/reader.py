@@ -26,7 +26,7 @@ class Reader:
 
     def __call__(
         self,
-        data: str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset],
+        data: (str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset]),
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
@@ -67,7 +67,11 @@ class Reader:
                     xp.attrs["name"] = xp_name
                 else:
                     xp = read_tiffs(
-                        xp_dict, channels=channels, times=times, name=xp_name, meta_dict=meta_dict
+                        xp_dict,
+                        channels=channels,
+                        times=times,
+                        name=xp_name,
+                        meta_dict=meta_dict,
                     )
 
                 yield standardize(xp)

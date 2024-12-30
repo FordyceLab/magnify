@@ -37,7 +37,10 @@ def identify_buttons(assay, shape=None, pinlist=None, blank=None):
         tag=(("mark_row", "mark_col"), names_array),
         valid=(
             ("mark_row", "mark_col", "time"),
-            np.ones((names_array.shape[0], names_array.shape[1], assay.sizes["time"]), dtype=bool),
+            np.ones(
+                (names_array.shape[0], names_array.shape[1], assay.sizes["time"]),
+                dtype=bool,
+            ),
         ),
     )
 
@@ -158,7 +161,8 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
 
     # Cluster points to the closest code.
     tag_idxs = np.argmin(
-        np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
+        np.linalg.norm(X_r[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1),
+        axis=1,
     )
 
     # Step 4: Perform a better clustering using a Gaussian mixture model initialized with the
@@ -226,7 +230,8 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         tag_idxs = np.argmax(probs, axis=1)
     else:
         tag_idxs = np.argmin(
-            np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1), axis=1
+            np.linalg.norm(X[:, np.newaxis] - (A * code_ratios + p)[np.newaxis], axis=-1),
+            axis=1,
         )
     assay = assay.assign_coords(
         tag=("mark", tag_names[tag_idxs]),

@@ -22,7 +22,12 @@ def to_uint8(arr: np.ndarray) -> np.ndarray:
 
 
 def circle(
-    image_length: int, row: int, col: int, radius: int, value: Any = 1, thickness: int = -1
+    image_length: int,
+    row: int,
+    col: int,
+    radius: int,
+    value: Any = 1,
+    thickness: int = -1,
 ) -> np.ndarray:
     image = np.zeros((image_length, image_length), dtype=np.uint8)
     cv.circle(image, (col, row), radius, 1, thickness=thickness)
@@ -31,7 +36,12 @@ def circle(
 
 
 def annulus(
-    image_length: int, row: int, col: int, outer_radius: int, inner_radius: int, value: Any = 1.0
+    image_length: int,
+    row: int,
+    col: int,
+    outer_radius: int,
+    inner_radius: int,
+    value: Any = 1.0,
 ) -> np.ndarray:
     outer_circle = circle(image_length, row, col, outer_radius, value)
     inner_circle = circle(image_length, row, col, inner_radius, value)
@@ -132,7 +142,8 @@ def circle_points(r, four_connected=False):
     while x < -y:
         # Make use of the 8-way symmetry of the circle.
         points[n : n + 8] = np.array(
-            [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]], dtype=np.int32
+            [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]],
+            dtype=np.int32,
         )
         n += 8
         # Test if we're currently inside or outside the circle.

@@ -43,7 +43,9 @@ def filter_expression(
 
 @registry.component("filter_nonround")
 def filter_nonround(
-    assay: xr.Dataset, min_roundness: float = 0.75, search_channel: str | list[str] | None = None
+    assay: xr.Dataset,
+    min_roundness: float = 0.75,
+    search_channel: str | list[str] | None = None,
 ):
     if search_channel is None:
         search_channels = assay.channel
