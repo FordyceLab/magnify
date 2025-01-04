@@ -24,7 +24,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{matrix.python-version}}
-      - name: Install Qt Bindings
-        run: pip install PyQt5
+      - name: Install dependencies
+        run: uv install PyQt5
       - name: Run tests
         run: uv run --dev pytest tests
