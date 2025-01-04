@@ -424,6 +424,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_pipe: bool = False,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -439,6 +440,7 @@ class ButtonFinder:
             progress_bar=progress_bar,
             search_timestep=search_timestep,
             search_channel=search_channel,
+            vis_pipe=vis_pipe,
         )
 
 

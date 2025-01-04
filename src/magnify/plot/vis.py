@@ -4,7 +4,7 @@ from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from magnify import find
 
-viewer = None
+viewer = napari.Viewer()
 
 
 class EdgeDetectionUI:
@@ -61,7 +61,6 @@ class EdgeDetectionUI:
 
 def display_ui(img, edges, dx, dy, vis_pipe):
     if vis_pipe:
-        viewer = napari.Viewer
         ui = EdgeDetectionUI(img, edges)
         find.compute_edges.dx.value = dx
         find.compute_edges.dy.value = dy
