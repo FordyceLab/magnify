@@ -11,11 +11,10 @@ class MagnifyAccessor:
         self._tempdir = None
 
     def cache(self):
-        if self._store is None:
-            try:
-                self._store = zarr.storage.TempStore()
-            except AttributeError:
-                self._store = zarr.storage.MemoryStore()  # Fallback
+        try:
+            self._store = zarr.storage.TempStore()
+        except AttributeError:
+            self._store = zarr.storage.MemoryStore()  # Fallback
 
         if isinstance(self._obj, xr.Dataset):
             arrays = self._obj.variables
