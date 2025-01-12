@@ -42,7 +42,7 @@ dev = [
     "sphinx>=5.3.0", 
     "sphinx-autodoc-typehints>=1.22",  
     "sphinx-press-theme>=0.8.0",
-    "zarr>=2.13.0",
+    "zarr>=2.18.3",
 ]
 
 [build-system]
