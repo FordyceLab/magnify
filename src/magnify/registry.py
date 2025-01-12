@@ -58,7 +58,7 @@ def mini_chip(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False,
+    vis_mode: bool = False,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Find buttons in minichip images and standardize the resulting data in an xarray.Dataset
@@ -123,7 +123,7 @@ def mini_chip(
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
-    vis_pipe:
+    vis_mode:
         If True, a window will be opened to show the interim processing results.
     Returns
     -------
@@ -174,7 +174,7 @@ def mini_chip(
         squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
-        vis_pipe=vis_pipe,
+        vis_mode=vis_mode,
     )
     return pipe(data=data, times=times, channels=channels)
 
@@ -202,7 +202,7 @@ def mini_chip_pipe(
     squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
-    vis_pipe: bool = False,
+    vis_mode: bool = False,
 ) -> Pipeline:
     """
     Build a Pipeline object that can detect buttons in minichip images and standardize the resulting data in an xarray.Dataset.

@@ -5,7 +5,7 @@ __all__ = [
     "relplot",
     "roishow",
     "set_style",
-    "vis",
+    "display_ui",
 ]
 from magnify.plot.image import imshow, roishow
 from magnify.plot.mrbles import mrbles_clusters
