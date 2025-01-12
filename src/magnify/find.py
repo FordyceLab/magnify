@@ -52,7 +52,8 @@ class ButtonFinder:
         self.search_channels = utils.to_list(search_channel)
 
     def __del__(self):
-        self.gui.close()
+        if self.gui is not None:
+            self.gui.close()
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
