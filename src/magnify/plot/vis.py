@@ -4,7 +4,6 @@ from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 class ViewerUI:
     def __init__(self, gui, img, caller):
-        self.img = img
         # self.edges = edges
         self.viewer = gui
         self.loop = QEventLoop()
@@ -20,7 +19,7 @@ class ViewerUI:
         self.viewer.window.add_dock_widget(cont_button, area="right")
 
         # Add layers to the self.viewer
-        self.viewer.add_image(self.img, name="Image")
+        self.viewer.add_image(img, name="Image")
         # self.viewer.add_image(self.edges, name="Edges")
         self.viewer.add_image(self.caller.value, name="Edges")
         self.viewer.show()

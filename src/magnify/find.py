@@ -51,9 +51,9 @@ class ButtonFinder:
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
 
-    def __del__(self):
-        if self.gui is not None:
-            self.gui.close()
+    # def __del__(self):
+    #    if self.gui is not None:
+    #        self.gui.close()
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
@@ -970,4 +970,4 @@ def compute_edges(
         threshold2=high_thresh,
         L2gradient=True,
     )
-    return {"Edges": edges}
+    return {"Edges": edges, "low_thresh": low_thresh, "high_thresh": high_thresh}

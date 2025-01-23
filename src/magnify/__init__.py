@@ -23,7 +23,6 @@ __all__ = [
     "preprocess",
     "reader",
     "stitch",
-    "compute_edges",
 ]
 
 from . import accessor, filter, find, identify, postprocess, preprocess, reader, stitch
