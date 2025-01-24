@@ -11,8 +11,10 @@ class MagnifyAccessor:
         self._tempdir = None
 
     def cache(self):
-        if self._tempdir is None:
-            self._tempdir = zarr.storage.TempStore()
+        try:
+            self._store = zarr.storage.TempStore()
+        except AttributeError:
+            self._store = zarr.storage.MemoryStore()  # Fallback
 
         if isinstance(self._obj, xr.Dataset):
             arrays = self._obj.variables
@@ -22,7 +24,11 @@ class MagnifyAccessor:
         for name, arr in arrays.items():
             if isinstance(arr.data, da.Array):
                 arr.data = da.to_zarr(
-                    arr.data, url=self._tempdir, component=name, return_stored=True, overwrite=True
+                    arr.data,
+                    url=self._tempdir,
+                    component=name,
+                    return_stored=True,
+                    overwrite=True,
                 )
 
         return self._obj

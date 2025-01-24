@@ -4,15 +4,18 @@ import math
 
 import cv2 as cv
 import dask.array as da
+import napari
 import numba
 import numpy as np
 import scipy
 import tqdm
 import xarray as xr
+from magicgui import magic_factory
 from numba import prange
 
 import magnify.registry as registry
 from magnify import logger, utils
+from magnify.plot import display_ui
 
 
 class ButtonFinder:
@@ -31,6 +34,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_mode: bool = False,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -43,8 +47,13 @@ class ButtonFinder:
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
+        self.gui = napari.Viewer() if vis_mode else None
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
+
+    # def __del__(self):
+    #    if self.gui is not None:
+    #        self.gui.close()
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
@@ -80,7 +89,10 @@ class ButtonFinder:
                 self.roi_length,
             ),
         )
-        assay["roi"] = (("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"), roi)
+        assay["roi"] = (
+            ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
+            roi,
+        )
         assay = assay.assign_coords(
             fg=(
                 ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
@@ -212,6 +224,7 @@ class ButtonFinder:
                 max_radius=self.max_button_radius,
                 min_dist=min_button_dist,
                 min_roundness=self.min_roundness,
+                gui=self.gui,
             )[0][:, :2]
 
             if len(points) > 0:
@@ -254,7 +267,11 @@ class ButtonFinder:
 
         # Step 4: Draw lines through each cluster.
         row_slope, row_intercepts = regress_clusters(
-            x, y, labels=row_labels, num_clusters=num_rows, ideal_num_points=points_per_row
+            x,
+            y,
+            labels=row_labels,
+            num_clusters=num_rows,
+            ideal_num_points=points_per_row,
         )
         # We treat column indices as y and row indices as x to avoid near-infinite slopes.
         col_slope, col_intercepts = regress_clusters(
@@ -322,6 +339,7 @@ class ButtonFinder:
                             max_radius=self.max_button_radius,
                             min_dist=0,
                             min_roundness=self.min_roundness,
+                            gui=self.gui,
                         )
                         if len(circles) > 0:
                             scores = scores
@@ -387,6 +405,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
+        vis_mode: bool = False,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -402,6 +421,7 @@ class ButtonFinder:
             progress_bar=progress_bar,
             search_timestep=search_timestep,
             search_channel=search_channel,
+            vis_mode=vis_mode,
         )
 
 
@@ -416,6 +436,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
+        vis_mode: bool = False,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
@@ -425,6 +446,7 @@ class BeadFinder:
         self.min_roundness = min_roundness
         self.roi_length = roi_length
         self.search_channels = utils.to_list(search_channel)
+        self.gui = napari.Viewer() if vis_mode else None
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
@@ -444,6 +466,7 @@ class BeadFinder:
                     max_radius=self.max_bead_radius,
                     min_dist=2 * self.min_bead_radius,
                     min_roundness=self.min_roundness,
+                    gui=self.gui,
                 )[0]
                 if len(beads) > 0:
                     # Exclude beads that we've already seen.
@@ -697,6 +720,7 @@ def find_circles(
     max_radius: int,
     min_roundness: float,
     min_dist: int,
+    gui: napari.Viewer | None,
 ):
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
@@ -717,6 +741,12 @@ def find_circles(
         threshold2=high_thresh,
         L2gradient=True,
     )
+
+    if gui is not None:
+        edge_widget = compute_edges()
+        edge_widget.value = edges
+        edges = display_ui(gui, img, dx, dy, edge_widget)
+
     edges[edges != 0] = 1
     logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
 
@@ -875,7 +905,8 @@ def grid_array(arr, grid_length):
     for i in range(num_rows):
         for j in range(num_cols):
             grid_counts[i, j] = arr[
-                i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                i * grid_length : (i + 1) * grid_length,
+                j * grid_length : (j + 1) * grid_length,
             ].sum()
 
     # The number of edges in each grid cell is variable in length so we'll store
@@ -887,7 +918,8 @@ def grid_array(arr, grid_length):
         for j in range(num_cols):
             r, c = np.where(
                 arr[
-                    i * grid_length : (i + 1) * grid_length, j * grid_length : (j + 1) * grid_length
+                    i * grid_length : (i + 1) * grid_length,
+                    j * grid_length : (j + 1) * grid_length,
                 ]
             )
             grid_starts[i, j] = n
@@ -914,3 +946,28 @@ def circle_labels(circles, num_rows, num_cols):
                     labels[r, c] = i
 
     return labels
+
+
+def _on_init_compute_edge(widget):
+    widget.low_edge_quantile.changed.connect()
+    widget.high_edge_quantile.changed.connect()
+
+
+@magic_factory(widget_init=_on_init_compute_edge, auto_call=True)
+def compute_edges(
+    dx,
+    dy,
+    low_edge_quantile: float = 0.1,
+    high_edge_quantile: float = 0.9,
+) -> dict:
+    grad = np.sqrt(dx**2 + dy**2)
+    low_thresh = np.quantile(grad, low_edge_quantile)
+    high_thresh = np.quantile(grad, high_edge_quantile)
+    edges = cv.Canny(
+        dx.astype(np.int16),
+        dy.astype(np.int16),
+        threshold1=low_thresh,
+        threshold2=high_thresh,
+        L2gradient=True,
+    )
+    return {"Edges": edges, "low_thresh": low_thresh, "high_thresh": high_thresh}
