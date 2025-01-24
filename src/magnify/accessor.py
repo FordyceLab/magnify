@@ -3,7 +3,6 @@ import xarray as xr
 import zarr.storage
 
 
-# @xr.register_dataset_accessor("mg")
 @xr.register_dataarray_accessor("mg")
 class MagnifyAccessor:
     def __init__(self, xarray_obj):
@@ -11,11 +10,7 @@ class MagnifyAccessor:
         self._tempdir = None
 
     def cache(self):
-        try:
-            self._store = zarr.storage.TempStore()
-        except AttributeError:
-            self._store = zarr.storage.MemoryStore()  # Fallback
-
+        self._tempdir = zarr.storage.TempStore()
         if isinstance(self._obj, xr.Dataset):
             arrays = self._obj.variables
         else:
