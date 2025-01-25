@@ -1,7 +1,6 @@
 import math
-
-from numba import prange
 from typing import Annotated
+
 import cv2 as cv
 import dask.array as da
 import napari.types
@@ -10,6 +9,7 @@ import numpy as np
 import scipy
 import tqdm
 import xarray as xr
+from numba import prange
 
 import magnify.registry as registry
 from magnify import logger, utils

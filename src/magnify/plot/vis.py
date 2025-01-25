@@ -1,7 +1,8 @@
-from qtpy.QtCore import QEventLoop
 import magicgui
 import napari
 import napari.settings
+from qtpy.QtCore import QEventLoop
+
 
 class InteractiveUI:
     def __init__(self):

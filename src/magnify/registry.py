@@ -219,7 +219,9 @@ def microfluidic_chip_pipe(
         elif chip_type == "ps":
             row_dist, col_dist = 375 / 3.22, 655 / 3.22
         else:
-            raise ValueError(f"Invalid chip type: {chip_type}. Must be one of ['pc', 'ps', 'minichip']")
+            raise ValueError(
+                f"Invalid chip type: {chip_type}. Must be one of ['pc', 'ps', 'minichip']"
+            )
 
     config = {key: value for key, value in locals().items()}
 
