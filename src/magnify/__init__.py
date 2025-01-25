@@ -1,12 +1,8 @@
 __version__ = "0.10.1"
 
 __all__ = [
-    "mini_chip",
-    "mini_chip_pipe",
-    "pc_chip",
-    "pc_chip_pipe",
-    "ps_chip",
-    "ps_chip_pipe",
+    "microfluidic_chip",
+    "microfluidic_chip_pipe",
     "mrbles",
     "mrbles_pipe",
     "beads",
@@ -35,12 +31,8 @@ from .registry import (
     beads_pipe,
     image,
     image_pipe,
-    mini_chip,
-    mini_chip_pipe,
+    microfluidic_chip,
+    microfluidic_chip_pipe,
     mrbles,
     mrbles_pipe,
-    pc_chip,
-    pc_chip_pipe,
-    ps_chip,
-    ps_chip_pipe,
 )

@@ -26,7 +26,7 @@ class Reader:
 
     def __call__(
         self,
-        data: (str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset]),
+        data: str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset],
         times: Sequence[int] | None = None,
         channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:

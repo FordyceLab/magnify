@@ -28,5 +28,3 @@ jobs:
         run: uv pip install PyQt5
       - name: Run tests
         run: uv run --dev pytest tests
-
-        

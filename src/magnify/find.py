@@ -1,21 +1,19 @@
-from __future__ import annotations
-
 import math
+from typing import Annotated
 
 import cv2 as cv
 import dask.array as da
-import napari
+import napari.types
 import numba
 import numpy as np
 import scipy
 import tqdm
 import xarray as xr
-from magicgui import magic_factory
 from numba import prange
 
 import magnify.registry as registry
 from magnify import logger, utils
-from magnify.plot import display_ui
+from magnify.plot.vis import InteractiveUI
 
 
 class ButtonFinder:
@@ -34,7 +32,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
-        vis_mode: bool = False,
+        interactive: bool = False,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
@@ -47,13 +45,9 @@ class ButtonFinder:
         self.cluster_penalty = cluster_penalty
         self.roi_length = roi_length
         self.progress_bar = progress_bar
-        self.gui = napari.Viewer() if vis_mode else None
+        self.gui = InteractiveUI() if interactive else None
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
         self.search_channels = utils.to_list(search_channel)
-
-    # def __del__(self):
-    #    if self.gui is not None:
-    #        self.gui.close()
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
@@ -405,7 +399,7 @@ class ButtonFinder:
         progress_bar: bool = False,
         search_timestep: list[int] | None = None,
         search_channel: str | list[str] | None = None,
-        vis_mode: bool = False,
+        interactive: bool = False,
     ):
         return ButtonFinder(
             row_dist=row_dist,
@@ -421,7 +415,7 @@ class ButtonFinder:
             progress_bar=progress_bar,
             search_timestep=search_timestep,
             search_channel=search_channel,
-            vis_mode=vis_mode,
+            interactive=interactive,
         )
 
 
@@ -436,7 +430,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
-        vis_mode: bool = False,
+        interactive: bool = False,
     ):
         self.min_bead_radius = min_bead_radius
         self.max_bead_radius = max_bead_radius
@@ -446,7 +440,7 @@ class BeadFinder:
         self.min_roundness = min_roundness
         self.roi_length = roi_length
         self.search_channels = utils.to_list(search_channel)
-        self.gui = napari.Viewer() if vis_mode else None
+        self.gui = InteractiveUI() if interactive else None
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
         if not self.search_channels:
@@ -537,11 +531,11 @@ class BeadFinder:
         # Compute the foreground and background masks for all buttons.
         # TODO: Don't assume beads don't move across timesteps.
         # Iterate over numpy arrays since indexing over xarrays is slow.
-        x = assay.x.sel(time=0).to_numpy()
-        y = assay.y.sel(time=0).to_numpy()
+        x = assay.x.isel(time=0).to_numpy()
+        y = assay.y.isel(time=0).to_numpy()
         fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
         bg = np.empty_like(fg)
-        image = assay.image.sel(time=0, channel=self.search_channels).to_numpy()
+        image = assay.image.isel(time=0).sel(channel=self.search_channels).to_numpy()
         for i in range(num_beads):
             # Set the subimage region for this bead.
             top, bottom, left, right = utils.bounding_box(
@@ -584,6 +578,7 @@ class BeadFinder:
                 np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
             ),
         )
+
         return assay
 
     @registry.components.register("find_beads")
@@ -596,6 +591,7 @@ class BeadFinder:
         min_roundness: float = 0.3,
         roi_length: int = 61,
         search_channel: str | list[str] | None = None,
+        interactive: bool = False,
     ):
         return BeadFinder(
             min_bead_radius=min_bead_radius,
@@ -606,6 +602,7 @@ class BeadFinder:
             min_roundness=min_roundness,
             roi_length=roi_length,
             search_channel=search_channel,
+            interactive=interactive,
         )
 
 
@@ -720,7 +717,7 @@ def find_circles(
     max_radius: int,
     min_roundness: float,
     min_dist: int,
-    gui: napari.Viewer | None,
+    gui: InteractiveUI | None,
 ):
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
@@ -731,24 +728,28 @@ def find_circles(
     dx = cv.Scharr(img, ddepth=cv.CV_32F, dx=1, dy=0)
     dy = cv.Scharr(img, ddepth=cv.CV_32F, dx=0, dy=1)
     grad = np.sqrt(dx**2 + dy**2)
-    logger.debug("Gradient Magnitudes", grad)
-    low_thresh = np.quantile(grad, low_edge_quantile)
-    high_thresh = np.quantile(grad, high_edge_quantile)
-    edges = cv.Canny(
-        dx.astype(np.int16),
-        dy.astype(np.int16),
-        threshold1=low_thresh,
-        threshold2=high_thresh,
-        L2gradient=True,
-    )
+
+    def compute_edges(
+        low_edge_quantile: Annotated[float, {"max": 1.0}] = low_edge_quantile,
+        high_edge_quantile: Annotated[float, {"max": 1.0}] = high_edge_quantile,
+    ) -> list[napari.types.LayerDataTuple]:
+        low_thresh = np.quantile(grad, low_edge_quantile)
+        high_thresh = np.quantile(grad, high_edge_quantile)
+        edges = cv.Canny(
+            dx.astype(np.int16),
+            dy.astype(np.int16),
+            threshold1=low_thresh,
+            threshold2=high_thresh,
+            L2gradient=True,
+        )
+        return [(edges, {"name": "Edges"}), (img, {"name": "Image", "opacity": 0.5})]
 
     if gui is not None:
-        edge_widget = compute_edges()
-        edge_widget.value = edges
-        edges = display_ui(gui, img, dx, dy, edge_widget)
+        edges = gui.run_widget(compute_edges, auto_call=True, last=True)[0][0]
+    else:
+        edges = compute_edges()[0][0]
 
     edges[edges != 0] = 1
-    logger.debug(f"Edges (low_thresh: {low_thresh} high_thresh: {high_thresh})", edges)
 
     # Step 3: Use edges to find candidate circles.
     circles = candidate_circles(edges, grid_length, num_iter)
@@ -946,28 +947,3 @@ def circle_labels(circles, num_rows, num_cols):
                     labels[r, c] = i
 
     return labels
-
-
-def _on_init_compute_edge(widget):
-    widget.low_edge_quantile.changed.connect()
-    widget.high_edge_quantile.changed.connect()
-
-
-@magic_factory(widget_init=_on_init_compute_edge, auto_call=True)
-def compute_edges(
-    dx,
-    dy,
-    low_edge_quantile: float = 0.1,
-    high_edge_quantile: float = 0.9,
-) -> dict:
-    grad = np.sqrt(dx**2 + dy**2)
-    low_thresh = np.quantile(grad, low_edge_quantile)
-    high_thresh = np.quantile(grad, high_edge_quantile)
-    edges = cv.Canny(
-        dx.astype(np.int16),
-        dy.astype(np.int16),
-        threshold1=low_thresh,
-        threshold2=high_thresh,
-        L2gradient=True,
-    )
-    return {"Edges": edges, "low_thresh": low_thresh, "high_thresh": high_thresh}
