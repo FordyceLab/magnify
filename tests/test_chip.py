@@ -24,7 +24,7 @@ def chip_1x1():
 
 def test_one_by_one_chip(chip_1x1):
     xp = (
-        mg.mini_chip(
+        mg.microfluidic_chip(
             data=chip_1x1,
             shape=(1, 1),
             min_button_radius=8,
