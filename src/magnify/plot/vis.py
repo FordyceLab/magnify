@@ -1,59 +1,42 @@
 from qtpy.QtCore import QEventLoop
-from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
+import magicgui
+import napari
+import napari.settings
 
+class InteractiveUI:
+    def __init__(self):
+        self.viewer = napari.Viewer()
+        self.event_loop = QEventLoop()
+        self.widget = None
 
-class ViewerUI:
-    def __init__(self, gui, img, caller):
-        # self.edges = edges
-        self.viewer = gui
-        self.loop = QEventLoop()
-        self.caller = caller
-
-        # UI Setup
-        self.viewer.window.add_dock_widget(self.caller, area="right")
-        if self.caller is not None:
-            self.caller.called.connect(self.update_layer)
-
-        # Add the continue button
-        cont_button = self.create_button("Continue", self.continue_event)
-        self.viewer.window.add_dock_widget(cont_button, area="right")
-
-        # Add layers to the self.viewer
-        self.viewer.add_image(img, name="Image")
-        # self.viewer.add_image(self.edges, name="Edges")
-        self.viewer.add_image(self.caller.value, name="Edges")
-        self.viewer.show()
-
-    def update_layer(self, layer_dict):
-        layer, value = next(iter(layer_dict.items()))
-        if layer in self.viewer.layers:
-            self.viewer.layers[layer].data = value
-        else:
-            self.viewer.add_image(value, name=layer)
-
-    def continue_event(self):
-        self.loop.quit()
+    def continue_event(self, last):
         self.viewer.layers.clear()
-        for dock_widget in list(self.viewer.window._dock_widgets.values()):
-            self.viewer.window.remove_dock_widget(dock_widget)
+        self.viewer.window.remove_dock_widget(self.widget)
+        if last:
+            self.viewer.close()
 
-    @staticmethod
-    def create_button(label_text, click_event):
-        widget = QWidget()
-        layout = QVBoxLayout()
+        self.event_loop.quit()
 
-        button = QPushButton(label_text)
-        button.clicked.connect(click_event)
+    def run_widget(self, func, auto_call=False, last=False):
+        # Make the widget.
+        widget_func = magicgui.magicgui(func, auto_call=auto_call)
+        self.widget = self.viewer.window.add_dock_widget(widget_func, area="right")
+        # Setup the continue button.
+        continue_btn = magicgui.widgets.PushButton(value=True, text="Continue")
+        continue_btn.changed.connect(lambda: self.continue_event(last=last))
+        widget_func.append(continue_btn)
+        # Call the widget function to initialize it in the viewer.
+        widget_func()
 
-        layout.addWidget(button)
-        widget.setLayout(layout)
+        # If we are in a notebook we don't want napari to integrate with the
+        # ipython loop since we want it to run in qt.
+        settings = napari.settings.get_settings().application
+        ipy = settings.ipy_interactive
+        settings.ipy_interactive = False
+        # Run the event loop.
+        self.viewer.show()
+        self.event_loop.exec_()
+        # Reset ipy_interactive to its previous value.
+        settings.ipy_interactive = ipy
 
-        return widget
-
-
-def display_ui(gui, img, dx, dy, widget=None):
-    ui = ViewerUI(gui, img, widget)
-    widget.dx.bind(dx)
-    widget.dy.bind(dy)
-    ui.loop.exec_()
-    return widget.value
+        return widget_func()
