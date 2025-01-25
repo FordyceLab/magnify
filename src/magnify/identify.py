@@ -100,16 +100,6 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
     # that minimizes the distance between each bead and its closest code.
     code_ratios = codes_df[lns[1:]].to_numpy()
 
-    # We will try to find a good affine transformation by minimizing a function that approximates
-    # a per-cluster distance function.
-    def loss(theta):
-        A = theta[: num_lns - 1]
-        p = theta[num_lns - 1 :]
-        eps = 1e-8
-        dist = np.linalg.norm((A * code_ratios + p)[np.newaxis] - X_r[:, np.newaxis], axis=-1)
-        # Logsumexp is a smooth approximation to the max function when eps is small.
-        return -eps * np.sum(scipy.special.logsumexp(-dist / eps, axis=-1)) / len(X_r)
-
     # Minimize the loss only considering affine transforms close to an estimated scaling factor.
     @numba.njit
     def fit_1d(points, codes, counts, N=100):
