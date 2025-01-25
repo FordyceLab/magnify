@@ -11,7 +11,6 @@ class InteractiveUI:
         self.widget = None
 
     def continue_event(self, last):
-        self.viewer.layers.clear()
         self.viewer.window.remove_dock_widget(self.widget)
         if last:
             self.viewer.close()
@@ -40,4 +39,7 @@ class InteractiveUI:
         # Reset ipy_interactive to its previous value.
         settings.ipy_interactive = ipy
 
-        return widget_func()
+        # Getting the function's return value re-adds the layers so we need to clear them after.
+        retval = widget_func()
+        self.viewer.layers.clear()
+        return retval

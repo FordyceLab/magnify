@@ -320,7 +320,6 @@ class ButtonFinder:
                         subimage = roi[i, j, channel]
                         subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
-                        find_circles
                         circles, scores = find_circles(
                             subimage,
                             low_edge_quantile=self.low_edge_quantile,
@@ -333,7 +332,7 @@ class ButtonFinder:
                             max_radius=self.max_button_radius,
                             min_dist=0,
                             min_roundness=self.min_roundness,
-                            gui=self.gui,
+                            gui=None,
                         )
                         if len(circles) > 0:
                             scores = scores
@@ -742,63 +741,92 @@ def find_circles(
             threshold2=high_thresh,
             L2gradient=True,
         )
-        return [(edges, {"name": "Edges"}), (img, {"name": "Image", "opacity": 0.5})]
+        return [(img, {"name": "Image"}), (edges, {"name": "Edges", "blending": "additive"})]
 
     if gui is not None:
-        edges = gui.run_widget(compute_edges, auto_call=True, last=True)[0][0]
+        edges = gui.run_widget(compute_edges, auto_call=True)[1][0]
     else:
-        edges = compute_edges()[0][0]
+        edges = compute_edges()[1][0]
 
     edges[edges != 0] = 1
 
     # Step 3: Use edges to find candidate circles.
-    circles = candidate_circles(edges, grid_length, num_iter)
+    all_circles = candidate_circles(edges, grid_length, num_iter)
 
-    # Step 4: Filter circles based on size and position.
-    # Remove circles that are too small or large.
-    circles = circles[(circles[:, 2] >= min_radius) & (circles[:, 2] <= max_radius)]
-    # Round circle coordinates since we'll only by considering whole pixels.
-    circles = np.round(circles).astype(np.int32)
-    # Remove circles that that are completely off the image.
-    circles = circles[
-        (circles[:, 0] + circles[:, 2] >= 0)
-        & (circles[:, 1] + circles[:, 2] >= 0)
-        & (circles[:, 0] - circles[:, 2] < img.shape[0])
-        & (circles[:, 1] - circles[:, 2] < img.shape[1])
-    ]
+    retval = [0, 0]
 
-    # Step 5: Filter circles with low number of edges on their circumference
-    # or whose gradients don't point toward the center.
-    thetas = np.arctan2(dy, dx)
-    # Pad the gradient angles and edges to avoid boundary cases.
-    pad = 2 * max_radius
-    thetas = np.pad(thetas, pad)
-    edges = np.pad(edges, pad)
-    # Adjust circle coordinates to account for padding.
-    circles[:, :2] += pad
-    # Sort circles by radius.
-    order = np.argsort(circles[:, 2])
-    circles = circles[order]
+    def filter_circles(
+        min_radius: int = min_radius,
+        max_radius: int = max_radius,
+        min_roundness: Annotated[float, {"max": 1.0}] = min_roundness,
+        min_dist: int = min_dist,
+    ) -> list[napari.types.LayerDataTuple]:
+        # Step 4: Filter circles based on size and position.
+        # Remove circles that are too small or large.
+        circles = all_circles[(all_circles[:, 2] >= min_radius) & (all_circles[:, 2] <= max_radius)]
+        # Round circle coordinates since we'll only be considering whole pixels.
+        circles = np.round(circles).astype(np.int32)
+        # Remove circles that that are completely off the image.
+        circles = circles[
+            (circles[:, 0] + circles[:, 2] >= 0)
+            & (circles[:, 1] + circles[:, 2] >= 0)
+            & (circles[:, 0] - circles[:, 2] < img.shape[0])
+            & (circles[:, 1] - circles[:, 2] < img.shape[1])
+        ]
 
-    start = 0
-    scores = []
-    for radius in range(min_radius, max_radius + 1):
-        perimeter_coords = utils.circle_points(radius)
-        end = np.searchsorted(circles[:, 2], radius + 1)
-        s = mean_grad(thetas, edges, circles[start:end, :2], perimeter_coords)
-        scores.append(s / len(perimeter_coords))
-        start = end
-    circles[:, :2] -= pad
-    scores = np.concatenate(scores)
-    circles = circles[scores >= min_roundness]
-    scores = scores[scores >= min_roundness]
+        # Step 5: Filter circles with low number of edges on their circumference
+        # or whose gradients don't point toward the center.
+        thetas = np.arctan2(dy, dx)
+        # Pad the gradient angles and edges to avoid boundary cases.
+        pad = 2 * max_radius
+        thetas = np.pad(thetas, pad)
+        padded_edges = np.pad(edges, pad)
+        # Adjust circle coordinates to account for padding.
+        circles[:, :2] += pad
+        # Sort circles by radius.
+        order = np.argsort(circles[:, 2])
+        circles = circles[order]
 
-    # Step 6: Remove duplicate circles that are too close to each other.
-    perm = np.argsort(-scores)
-    if min_dist > 0:
-        circles = filter_neighbors(circles[perm], min_dist)
+        start = 0
+        scores = []
+        for radius in range(min_radius, max_radius + 1):
+            perimeter_coords = utils.circle_points(radius)
+            end = np.searchsorted(circles[:, 2], radius + 1)
+            s = mean_grad(thetas, padded_edges, circles[start:end, :2], perimeter_coords)
+            scores.append(s / len(perimeter_coords))
+            start = end
+        circles[:, :2] -= pad
+        scores = np.concatenate(scores)
+        circles = circles[scores >= min_roundness]
+        scores = scores[scores >= min_roundness]
 
-    return circles, scores
+        # Step 6: Remove duplicate circles that are too close to each other.
+        perm = np.argsort(-scores)
+        if min_dist > 0:
+            circles = filter_neighbors(circles[perm], min_dist)
+
+        retval[0], retval[1] = circles, scores
+        return [
+            (img, {"name": "Image"}),
+            (
+                circles[:, :2],
+                {
+                    "name": "Circles",
+                    "size": 2 * circles[:, 2],
+                    "border_color": "white",
+                    "face_color": [0] * 4,
+                    "blending": "additive",
+                },
+                "points",
+            ),
+        ]
+
+    if gui is not None:
+        gui.run_widget(filter_circles, auto_call=True, last=True)
+    else:
+        filter_circles()
+
+    return tuple(retval)
 
 
 @numba.njit(parallel=True)
