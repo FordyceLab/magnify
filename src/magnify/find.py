@@ -448,33 +448,34 @@ class BeadFinder:
             self.search_channels = assay.channel
 
         beads = np.empty((0, 3))
-        for t in assay.time:
-            for search_channel in self.search_channels:
-                image = utils.to_uint8(assay.image.sel(channel=search_channel, time=t).to_numpy())
-                b = find_circles(
-                    image,
-                    low_edge_quantile=self.low_edge_quantile,
-                    high_edge_quantile=self.high_edge_quantile,
-                    grid_length=20,
-                    num_iter=self.num_iter,
-                    min_radius=self.min_bead_radius,
-                    max_radius=self.max_bead_radius,
-                    min_dist=2 * self.min_bead_radius,
-                    min_roundness=self.min_roundness,
-                    gui=self.gui,
-                )[0]
-                if len(beads) > 0:
-                    # Exclude beads that we've already seen.
-                    duplicates = np.array(
-                        [
-                            len(neighbors) > 0
-                            for neighbors in scipy.spatial.KDTree(beads[:, :2]).query_ball_point(
-                                b[:, :2], 2 * self.min_bead_radius
-                            )
-                        ]
-                    )
-                    b = b[~duplicates]
-                beads = np.concatenate([beads, b])
+        for search_channel in self.search_channels:
+            image = utils.to_uint8(
+                assay.image.isel(time=self.search_timestep).sel(channel=search_channel).to_numpy()
+            )
+            b = find_circles(
+                image,
+                low_edge_quantile=self.low_edge_quantile,
+                high_edge_quantile=self.high_edge_quantile,
+                grid_length=20,
+                num_iter=self.num_iter,
+                min_radius=self.min_bead_radius,
+                max_radius=self.max_bead_radius,
+                min_dist=2 * self.min_bead_radius,
+                min_roundness=self.min_roundness,
+                gui=self.gui,
+            )[0]
+            if len(beads) > 0:
+                # Exclude beads that we've already seen.
+                duplicates = np.array(
+                    [
+                        len(neighbors) > 0
+                        for neighbors in scipy.spatial.KDTree(beads[:, :2]).query_ball_point(
+                            b[:, :2], 2 * self.min_bead_radius
+                        )
+                    ]
+                )
+                b = b[~duplicates]
+            beads = np.concatenate([beads, b])
 
         num_beads = len(beads)
         # Store each channel and timesteps for each marker in one chunk and set marker row/col
@@ -532,8 +533,8 @@ class BeadFinder:
         # Compute the foreground and background masks for all buttons.
         # TODO: Don't assume beads don't move across timesteps.
         # Iterate over numpy arrays since indexing over xarrays is slow.
-        x = assay.x.isel(time=0).to_numpy()
-        y = assay.y.isel(time=0).to_numpy()
+        x = assay.x.isel(time=self.search_timestep).to_numpy()
+        y = assay.y.isel(time=self.search_timestep).to_numpy()
         fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
         bg = np.empty_like(fg)
         image = (
@@ -605,6 +606,7 @@ class BeadFinder:
             num_iter=num_iter,
             min_roundness=min_roundness,
             roi_length=roi_length,
+            search_timestep=search_timestep,
             search_channel=search_channel,
             interactive=interactive,
         )
@@ -734,8 +736,8 @@ def find_circles(
     grad = np.sqrt(dx**2 + dy**2)
 
     def compute_edges(
-        low_edge_quantile: Annotated[float, {"max": 1.0}] = low_edge_quantile,
-        high_edge_quantile: Annotated[float, {"max": 1.0}] = high_edge_quantile,
+        low_edge_quantile: Annotated[float, {"max": 1.0, "step": 0.001}] = low_edge_quantile,
+        high_edge_quantile: Annotated[float, {"max": 1.0, "step": 0.001}] = high_edge_quantile,
     ) -> list[napari.types.LayerDataTuple]:
         low_thresh = np.quantile(grad, low_edge_quantile)
         high_thresh = np.quantile(grad, high_edge_quantile)
