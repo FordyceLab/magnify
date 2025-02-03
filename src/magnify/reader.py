@@ -57,7 +57,7 @@ class Reader:
                 path = pathlib.Path(next(iter(xp_dict.values())))
                 # The only time we should have a directory is when we have a zarr array.
                 if len(xp_dict) == 1 and path.is_dir():
-                    if not (path / ".zattrs").is_file():
+                    if (path / ".zattrs").is_file():
                         # The file was written with a recent prismo version.
                         # The last element in the path is the group directory.
                         xp = xr.open_zarr(path.parent, group=path.name)
