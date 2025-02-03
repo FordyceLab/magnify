@@ -15,13 +15,16 @@ def drop(
     roi_only: bool = False,
     drop_tiles: bool = True,
 ):
+    # TODO: We need to restore the original order.
+    assay = assay.unstack()
+
     if squeeze:
         assay = assay.squeeze(drop=True)
 
     if roi_only:
         return assay.roi
     elif drop_tiles:
-        return assay.drop_vars("tile")
+        return assay.drop_vars(["tile", "tile_row", "tile_col"])
     else:
         return assay
 
