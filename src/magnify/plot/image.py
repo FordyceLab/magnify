@@ -50,6 +50,7 @@ def roishow(xp: xr.Dataset):
 def imshow(xp: xr.Dataset):
     settings = napari.settings.get_settings()
     settings.appearance.layer_tooltip_visibility = True
+    xp = xp.transpose(..., "im_y", "im_x")
     img = xp.image
     if "channel" in img.dims:
         viewer = napari.imshow(
@@ -65,7 +66,7 @@ def imshow(xp: xr.Dataset):
         if len(extra_dims) > 0:
             roi_stack = xp.roi.stack(extra_dims=extra_dims).compute()
         else:
-            roi_stack = xp.expand_dims("extra_dims").compute()
+            roi_stack = xp.roi.expand_dims("extra_dims").compute()
 
         roi_stack = roi_stack.transpose("mark", "extra_dims", "roi_y", "roi_x")
         fg_labels = np.zeros(
@@ -89,8 +90,8 @@ def imshow(xp: xr.Dataset):
                     m.x.astype(int).item(),
                     m.y.astype(int).item(),
                     roi_stack.sizes["roi_y"],
-                    img.shape[-1],
-                    img.shape[-2],
+                    img.sizes["im_x"],
+                    img.sizes["im_y"],
                 )
                 # Set the roi bounding box.
                 roi_contours[i, j, :, :-2] = np.unravel_index(j, extra_dim_shape)
@@ -108,7 +109,7 @@ def imshow(xp: xr.Dataset):
         roi_contours = roi_contours.reshape(-1, 4, len(extra_dims) + 2)
         props = {
             "mark": [f"{mark.item()}" for mark in xp.mark],
-            "tag": list(xp.tag.to_numpy()),
+            "tag": list(xp.tag.to_numpy()) if "tag" in xp else [""] * xp.sizes["mark"],
         }
         viewer.add_labels(
             fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
