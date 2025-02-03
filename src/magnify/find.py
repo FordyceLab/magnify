@@ -439,6 +439,7 @@ class BeadFinder:
         self.num_iter = num_iter
         self.min_roundness = min_roundness
         self.roi_length = roi_length
+        self.search_timestep = search_timestep
         self.search_channels = utils.to_list(search_channel)
         self.gui = InteractiveUI() if interactive else None
 
