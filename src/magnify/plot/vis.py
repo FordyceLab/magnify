@@ -33,11 +33,11 @@ class InteractiveUI:
         settings = napari.settings.get_settings().application
         ipy = settings.ipy_interactive
         settings.ipy_interactive = False
-        # Run the event loop.
         self.viewer.show()
-        self.event_loop.exec_()
         # Reset ipy_interactive to its previous value.
         settings.ipy_interactive = ipy
+        # Run the event loop.
+        self.event_loop.exec_()
 
         # Getting the function's return value re-adds the layers so we need to clear them after.
         retval = widget_func()
