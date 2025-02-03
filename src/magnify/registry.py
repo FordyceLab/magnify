@@ -118,7 +118,6 @@ def microfluidic_chip(
         as the closest searched timestep before it, or if there isn't one the closest timestep after it.
     search_channel :
         The channel or list of channels to use for button detection and expression filtering. If `None`, all channels will be used.
-        If True, removes singleton dimensions from the dataset (dimensions of size 1).
     roi_only :
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
@@ -255,6 +254,7 @@ def mrbles(
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
     roi_length: int = 61,
+    search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     reference: str = "eu",
     squeeze: bool = True,
@@ -309,9 +309,10 @@ def mrbles(
         The minimum roundness value for detected beads. Beads that do not meet this roundness threshold are excluded. Valued between 0 and 1.
     roi_length :
         The length (in pixels) of the region of interest (ROI) around detected beads.
+    search_timestep :
+        The timestep to use for bead detection.
     search_channel :
         The channel or list of channels to use for bead detection and analysis. If `None`, all channels are used.
-        If True, removes singleton dimensions from the dataset(dimensions of size 1).
     reference :
         The reference material or standard used for spectral decoding. The default is "eu" (Europium), which is typically used in MRBLEs for comparison in spectral analysis.
     squeeze :
@@ -384,6 +385,7 @@ def mrbles_pipe(
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
     roi_length: int = 61,
+    search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     reference: str = "eu",
     squeeze: bool = True,
@@ -426,6 +428,7 @@ def beads(
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
     roi_length: int = 61,
+    search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     squeeze: bool = True,
     roi_only: bool = False,
@@ -475,9 +478,10 @@ def beads(
         The minimum roundness value for beads to be detected. A higher value enforces stricter roundness requirements. Valued between 0 and 1.
     roi_length :
         The length (in pixels) of the region of interest (ROI) around detected beads. This determines the size of the sub-image extracted around each detected bead.
+    search_timestep :
+        The timestep to use for bead detection.
     search_channel :
         The channel or list of channels to use for bead detection. If `None`, all channels will be used for the search.
-        If True, removes singleton dimensions from the dataset(dimensions of size 1).
     squeeze :
         If True, removes singleton dimensions from the dataset (dimensions of size 1), simplifying the data structure.
     roi_only :
@@ -522,6 +526,7 @@ def beads(
         num_iter=num_iter,
         min_roundness=min_roundness,
         roi_length=roi_length,
+        search_timestep=search_timestep,
         search_channel=search_channel,
         squeeze=squeeze,
         roi_only=roi_only,
@@ -543,6 +548,7 @@ def beads_pipe(
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
     roi_length: int = 61,
+    search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     squeeze: bool = True,
     roi_only: bool = False,

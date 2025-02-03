@@ -428,6 +428,7 @@ class BeadFinder:
         num_iter: int = 5000000,
         min_roundness: float = 0.3,
         roi_length: int = 61,
+        search_timestep: int = 0,
         search_channel: str | list[str] | None = None,
         interactive: bool = False,
     ):
@@ -534,7 +535,9 @@ class BeadFinder:
         y = assay.y.isel(time=0).to_numpy()
         fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
         bg = np.empty_like(fg)
-        image = assay.image.isel(time=0).sel(channel=self.search_channels).to_numpy()
+        image = (
+            assay.image.isel(time=self.search_timestep).sel(channel=self.search_channels).to_numpy()
+        )
         for i in range(num_beads):
             # Set the subimage region for this bead.
             top, bottom, left, right = utils.bounding_box(
@@ -589,6 +592,7 @@ class BeadFinder:
         num_iter: int = 5000000,
         min_roundness: float = 0.3,
         roi_length: int = 61,
+        search_timestep: int = 0,
         search_channel: str | list[str] | None = None,
         interactive: bool = False,
     ):
