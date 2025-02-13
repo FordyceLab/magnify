@@ -15,15 +15,14 @@ import magnify as mg
 import magnify.plot as mp
 
 # Process the experiment and get the output as an xarray dataset.
-pipe = mg.mrbles(search_channel="620", min_bead_radius=10)
-xp = pipe("example.ome.tif")
+xp = mg.mrbles("example.ome.tif", search_channel="620", min_bead_radius=10)
 
 # Get the mean bead area and intensity.
 print("Mean Bead Area:", xp.fg.sum(dim=["roi_x", "roi_y"]).mean())
 print("Mean Bead Intensity:", xp.where(xp.fg).roi.mean())
 
 # Show all the beads and how they were segmented.
-mp.imshow(xp, animation_frame="channel")
+mp.imshow(xp)
 ```
 ![](static/imshow.gif)
 
