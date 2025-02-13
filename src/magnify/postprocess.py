@@ -24,7 +24,7 @@ def drop(
     if roi_only:
         return assay.roi
     elif drop_tiles:
-        return assay.drop_vars(["tile", "tile_row", "tile_col"])
+        return assay.drop_vars(["tile", "tile_row", "tile_col"], errors="ignore")
     else:
         return assay
 
