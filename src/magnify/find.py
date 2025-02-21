@@ -318,7 +318,6 @@ class ButtonFinder:
                 if tag[i, j] != "":
                     for channel in search_channel_idxs:
                         subimage = roi[i, j, channel]
-                        subimage = utils.to_uint8(np.clip(subimage, np.median(subimage), None))
                         subimage -= subimage.min()
                         circles, scores = find_circles(
                             subimage,
