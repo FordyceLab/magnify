@@ -44,14 +44,15 @@ def microfluidic_chip(
     row_dist: float = 375 / 1.61,
     col_dist: float = 400 / 1.61,
     chip_type: str | None = None,
-    min_button_radius: int = 4,
-    max_button_radius: int = 15,
+    min_button_diameter: int = 8,
+    max_button_diameter: int = 30,
+    chamber_diameter: int = 60,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
     min_roundness: float = 0.2,
     cluster_penalty: float = 50,
-    roi_length: int = 61,
+    roi_length: int | None = None,
     progress_bar: bool = False,
     search_timestep: int | list[int] | None = None,
     search_channel: str | list[str] | None = None,
@@ -98,8 +99,10 @@ def microfluidic_chip(
         The distance between rows, columns of buttons (in pixels). This is converted to pixels based on the pixel-to-micron conversion rate, assuming 1.61 pixels.
     chip_type :
         The type of microfluidic chip that was imaged. Can be one of ["minichip"|"pc"|"ps"], if `chip_type` is not None then it will override `row_dist` and `col_dist`.
-    min_button_radius, max_button_radius :
-        The minimum, maximum radius (in pixels) for detecting buttons in the image.
+    min_button_diameter, max_button_diameter :
+        The minimum, maximum diameter (in pixels) for detecting buttons in the image.
+    chamber_diameter :
+        The diameter (in pixels) of the chamber around each button.
     low_edge_quantile, high_edge_quantile :
         The lower, upper quantile for edge detection, used to identify the dimmest edges when detecting buttons.
     num_iter :
@@ -110,7 +113,7 @@ def microfluidic_chip(
         A penalty number that balances two factors when identifying clusters: penalizing high inter-cluster variance and
         penalizing deviations from the expected number of items in a cluster. A higher value places more emphasis on the second factor
     roi_length :
-        The length (in pixels) of the region of interest (ROI) around detected buttons.
+        The length (in pixels) of the region of interest (ROI) around detected buttons. If None, the ROI length is said to 1.2 * `chamber_diameter`.
     progress_bar :
         If True, display a progress bar during processing to track the progress of the pipeline.
     search_timestep :
@@ -159,8 +162,9 @@ def microfluidic_chip(
         row_dist=row_dist,
         col_dist=col_dist,
         chip_type=chip_type,
-        min_button_radius=min_button_radius,
-        max_button_radius=max_button_radius,
+        min_button_diameter=min_button_diameter,
+        max_button_diameter=max_button_diameter,
+        chamber_diameter=chamber_diameter,
         low_edge_quantile=low_edge_quantile,
         high_edge_quantile=high_edge_quantile,
         num_iter=num_iter,
@@ -187,8 +191,9 @@ def microfluidic_chip_pipe(
     row_dist: float = 375 / 1.61,
     col_dist: float = 400 / 1.61,
     chip_type: str | None = None,
-    min_button_radius: int = 4,
-    max_button_radius: int = 15,
+    min_button_diameter: int = 8,
+    max_button_diameter: int = 30,
+    chamber_diameter: int = 60,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
@@ -247,13 +252,13 @@ def mrbles(
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
-    min_bead_radius: int = 5,
-    max_bead_radius: int = 25,
+    min_bead_diameter: int = 10,
+    max_bead_diameter: int = 50,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
-    roi_length: int = 61,
+    roi_length: int | None = None,
     search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     reference: str = "eu",
@@ -297,10 +302,8 @@ def mrbles(
         The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
         This overlap value is subtracted from both the vertical (y) and horizontal (x) dimensions
         of the tiles to remove redundant or overlapping areas between adjacent tiles.
-    min_bead_radius :
-        The minimum radius (in pixels) for detecting beads in the image.
-    min_button_radius, max_button_radius :
-        The minimum, maximum radius (in pixels) for detecting buttons in the image.
+    min_bead_diameter, max_bead_diameter :
+        The minimum, maximum diameter (in pixels) for detecting beads in the image.
     low_edge_quantile, high_edge_quantile:
         The lower, upper quantile for edge detection, used to identify the dimmest edges when detecting buttons.
     num_iter :
@@ -308,7 +311,7 @@ def mrbles(
     min_roundness :
         The minimum roundness value for detected beads. Beads that do not meet this roundness threshold are excluded. Valued between 0 and 1.
     roi_length :
-        The length (in pixels) of the region of interest (ROI) around detected beads.
+        The length (in pixels) of the region of interest (ROI) around detected beads. Set to 2 * max_bead_diameter if `roi_length` is None.
     search_timestep :
         The timestep to use for bead detection.
     search_channel :
@@ -354,8 +357,8 @@ def mrbles(
         flatfield=flatfield,
         darkfield=darkfield,
         overlap=overlap,
-        min_bead_radius=min_bead_radius,
-        max_bead_radius=max_bead_radius,
+        min_bead_diameter=min_bead_diameter,
+        max_bead_diameter=max_bead_diameter,
         low_edge_quantile=low_edge_quantile,
         high_edge_quantile=high_edge_quantile,
         num_iter=num_iter,
@@ -378,13 +381,13 @@ def mrbles_pipe(
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
-    min_bead_radius: int = 5,
-    max_bead_radius: int = 25,
+    min_bead_diameter: int = 10,
+    max_bead_diameter: int = 50,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
-    roi_length: int = 61,
+    roi_length: int | None = None,
     search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     reference: str = "eu",
@@ -421,13 +424,13 @@ def beads(
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
-    min_bead_radius: int = 5,
-    max_bead_radius: int = 25,
+    min_bead_diameter: int = 10,
+    max_bead_diameter: int = 50,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
-    roi_length: int = 61,
+    roi_length: int | None = None,
     search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     squeeze: bool = True,
@@ -468,8 +471,8 @@ def beads(
         The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
         This overlap value is subtracted from both the vertical (y) and horizontal (x) dimensions
         of the tiles to remove redundant or overlapping areas between adjacent tiles.
-    min_button_radius, max_button_radius :
-        The minimum, maximum radius (in pixels) for detecting buttons in the image.
+    min_bead_diameter, max_bead_diameter :
+        The minimum, maximum diameter (in pixels) for detecting beads in the image.
     low_edge_quantile, high_edge_quantile:
         The lower, upper quantile for edge detection, used to identify the dimmest edges when detecting buttons.
     num_iter :
@@ -477,7 +480,7 @@ def beads(
     min_roundness :
         The minimum roundness value for beads to be detected. A higher value enforces stricter roundness requirements. Valued between 0 and 1.
     roi_length :
-        The length (in pixels) of the region of interest (ROI) around detected beads. This determines the size of the sub-image extracted around each detected bead.
+        The length (in pixels) of the region of interest (ROI) around detected beads. If `roi_length` is `None`, the ROI length is set to 2 * `max_bead_diameter`.
     search_timestep :
         The timestep to use for bead detection.
     search_channel :
@@ -508,10 +511,14 @@ def beads(
     Examples
     --------
     >>> bead_image = beads(
-    ...     data=my_image_data, channels=[0, 1], overlap=100, min_bead_radius=5, max_bead_radius=20
+    ...     data=my_image_data,
+    ...     channels=[0, 1],
+    ...     overlap=100,
+    ...     min_bead_diameter=10,
+    ...     max_bead_diameter=40,
     ... )
 
-    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using only channels 0 and 1, and detects beads with a radius between 5 and 20 pixels.
+    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using only channels 0 and 1, and detects beads with a diameter between 10 and 40 pixels.
     """
 
     pipe = beads_pipe(
@@ -519,8 +526,8 @@ def beads(
         flatfield=flatfield,
         darkfield=darkfield,
         overlap=overlap,
-        min_bead_radius=min_bead_radius,
-        max_bead_radius=max_bead_radius,
+        min_bead_diameter=min_bead_diameter,
+        max_bead_diameter=max_bead_diameter,
         low_edge_quantile=low_edge_quantile,
         high_edge_quantile=high_edge_quantile,
         num_iter=num_iter,
@@ -541,13 +548,13 @@ def beads_pipe(
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
-    min_bead_radius: int = 5,
-    max_bead_radius: int = 25,
+    min_bead_diameter: int = 5,
+    max_bead_diameter: int = 25,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
     min_roundness: float = 0.3,
-    roi_length: int = 61,
+    roi_length: int | None = None,
     search_timestep: int = 0,
     search_channel: str | list[str] | None = None,
     squeeze: bool = True,

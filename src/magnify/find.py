@@ -19,31 +19,33 @@ from magnify.plot.vis import InteractiveUI
 class ButtonFinder:
     def __init__(
         self,
-        row_dist: float = 375 / 3.22,
-        col_dist: float = 655 / 3.22,
-        min_button_radius: int = 4,
-        max_button_radius: int = 15,
-        low_edge_quantile: float = 0.1,
-        high_edge_quantile: float = 0.9,
-        num_iter: int = 5000000,
-        min_roundness: float = 0.2,
-        cluster_penalty: float = 50,
-        roi_length: int = 61,
-        progress_bar: bool = False,
-        search_timestep: list[int] | None = None,
-        search_channel: str | list[str] | None = None,
-        interactive: bool = False,
+        row_dist: float,
+        col_dist: float,
+        min_button_diameter: int,
+        max_button_diameter: int,
+        chamber_diameter: int,
+        low_edge_quantile: float,
+        high_edge_quantile: float,
+        num_iter: int,
+        min_roundness: float,
+        cluster_penalty: float,
+        roi_length: int | None,
+        progress_bar: bool,
+        search_timestep: list[int] | None,
+        search_channel: str | list[str] | None,
+        interactive: bool,
     ):
         self.row_dist = row_dist
         self.col_dist = col_dist
-        self.min_button_radius = min_button_radius
-        self.max_button_radius = max_button_radius
+        self.min_button_radius = math.floor(min_button_diameter / 2)
+        self.max_button_radius = math.ceil(max_button_diameter / 2)
+        self.chamber_radius = round(chamber_diameter / 2)
         self.low_edge_quantile = low_edge_quantile
         self.high_edge_quantile = high_edge_quantile
         self.num_iter = num_iter
         self.min_roundness = min_roundness
         self.cluster_penalty = cluster_penalty
-        self.roi_length = roi_length
+        self.roi_length = roi_length if roi_length is not None else round(1.2 * chamber_diameter)
         self.progress_bar = progress_bar
         self.gui = InteractiveUI() if interactive else None
         self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
@@ -341,6 +343,7 @@ class ButtonFinder:
                                 best_score = scores[idx]
 
                 # Update our estimate of the button position if we found some circles.
+                button_radius = self.max_button_radius
                 if best_circle is not None:
                     y[i, j], x[i, j] = best_circle[:2]
                     # Change coordinates from roi to image coordinates.
@@ -355,6 +358,7 @@ class ButtonFinder:
                         assay.sizes["im_y"],
                     )
                     roi[i, j] = images[..., top:bottom, left:right]
+                    button_radius = best_circles[:, 2]
 
                 x_rel = round(x[i, j]) - left
                 y_rel = round(y[i, j]) - top
@@ -364,7 +368,7 @@ class ButtonFinder:
                     self.roi_length,
                     row=y_rel,
                     col=x_rel,
-                    outer_radius=2 * self.max_button_radius,
+                    outer_radius=self.chamber_radius,
                     inner_radius=self.max_button_radius,
                     value=1,
                 )
@@ -373,7 +377,7 @@ class ButtonFinder:
                     self.roi_length,
                     row=y_rel,
                     col=x_rel,
-                    radius=self.max_button_radius,
+                    radius=button_radius,
                     value=1,
                 )
 
@@ -384,26 +388,28 @@ class ButtonFinder:
 
     @registry.components.register("find_buttons")
     def make(
-        row_dist: float = 375 / 3.22,
-        col_dist: float = 655 / 3.22,
-        min_button_radius: int = 4,
-        max_button_radius: int = 15,
-        low_edge_quantile: float = 0.1,
-        high_edge_quantile: float = 0.9,
-        num_iter: int = 5000000,
-        min_roundness: float = 0.2,
-        cluster_penalty: float = 50,
-        roi_length: int = 61,
-        progress_bar: bool = False,
-        search_timestep: list[int] | None = None,
-        search_channel: str | list[str] | None = None,
-        interactive: bool = False,
+        row_dist: float,
+        col_dist: float,
+        min_button_diameter: int,
+        max_button_diameter: int,
+        chamber_diameter: int,
+        low_edge_quantile: float,
+        high_edge_quantile: float,
+        num_iter: int,
+        min_roundness: float,
+        cluster_penalty: float,
+        roi_length: int,
+        progress_bar: bool,
+        search_timestep: list[int] | None,
+        search_channel: str | list[str] | None,
+        interactive: bool,
     ):
         return ButtonFinder(
             row_dist=row_dist,
             col_dist=col_dist,
-            min_button_radius=min_button_radius,
-            max_button_radius=max_button_radius,
+            min_button_diameter=min_button_diameter,
+            max_button_diameter=max_button_diameter,
+            chamber_diameter=chamber_diameter,
             low_edge_quantile=low_edge_quantile,
             high_edge_quantile=high_edge_quantile,
             num_iter=num_iter,
@@ -420,24 +426,24 @@ class ButtonFinder:
 class BeadFinder:
     def __init__(
         self,
-        min_bead_radius: int = 5,
-        max_bead_radius: int = 25,
-        low_edge_quantile: float = 0.1,
-        high_edge_quantile: float = 0.9,
-        num_iter: int = 5000000,
-        min_roundness: float = 0.3,
-        roi_length: int = 61,
-        search_timestep: int = 0,
-        search_channel: str | list[str] | None = None,
-        interactive: bool = False,
+        min_bead_diameter: int,
+        max_bead_diameter: int,
+        low_edge_quantile: float,
+        high_edge_quantile: float,
+        num_iter: int,
+        min_roundness: float,
+        roi_length: int | None,
+        search_timestep: int,
+        search_channel: str | list[str] | None,
+        interactive: bool,
     ):
-        self.min_bead_radius = min_bead_radius
-        self.max_bead_radius = max_bead_radius
+        self.min_bead_radius = math.floor(min_bead_diameter / 2)
+        self.max_bead_radius = math.ceil(max_bead_diameter / 2)
         self.low_edge_quantile = low_edge_quantile
         self.high_edge_quantile = high_edge_quantile
         self.num_iter = num_iter
         self.min_roundness = min_roundness
-        self.roi_length = roi_length
+        self.roi_length = roi_length if roi_length is not None else 2 * max_bead_diameter
         self.search_timestep = search_timestep
         self.search_channels = utils.to_list(search_channel)
         self.gui = InteractiveUI() if interactive else None
@@ -586,20 +592,20 @@ class BeadFinder:
 
     @registry.components.register("find_beads")
     def make(
-        min_bead_radius: int = 5,
-        max_bead_radius: int = 25,
-        low_edge_quantile: float = 0.1,
-        high_edge_quantile: float = 0.9,
-        num_iter: int = 5000000,
-        min_roundness: float = 0.3,
-        roi_length: int = 61,
-        search_timestep: int = 0,
-        search_channel: str | list[str] | None = None,
-        interactive: bool = False,
+        min_bead_radius: int,
+        max_bead_radius: int,
+        low_edge_quantile: float,
+        high_edge_quantile: float,
+        num_iter: int,
+        min_roundness: float,
+        roi_length: int,
+        search_timestep: int,
+        search_channel: str | list[str] | None,
+        interactive: bool,
     ):
         return BeadFinder(
-            min_bead_radius=min_bead_radius,
-            max_bead_radius=max_bead_radius,
+            min_bead_diameter=min_bead_diameter,
+            max_bead_diameter=max_bead_diameter,
             low_edge_quantile=low_edge_quantile,
             high_edge_quantile=high_edge_quantile,
             num_iter=num_iter,
