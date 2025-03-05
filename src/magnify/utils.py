@@ -109,16 +109,23 @@ def filled_circle_points(r):
     n = len(perimeter)
     pts[:n] = perimeter
 
+    # First fill the circumference.
     for i in range(n):
         arr[pts[i, 0] + r, pts[i, 1] + r] = 1
 
+    # Fill the interior of the circle one row at a time.
     for i in range(0, 2 * r + 1):
         j = 0
+        # Iterate until we hit the circle's circumference.
         while not arr[i, j]:
             j += 1
+        # Iterate just past the circle's circumference.
         while arr[i, j]:
             j += 1
+        # Skip when the row only has circumference and no interior.
         if j <= r:
+            # We are in the interior of the circle so fill in the pts array until
+            # we hit the circumference again
             while not arr[i, j]:
                 pts[n, 0] = i - r
                 pts[n, 1] = j - r
