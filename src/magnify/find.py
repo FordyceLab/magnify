@@ -358,7 +358,7 @@ class ButtonFinder:
                         assay.sizes["im_y"],
                     )
                     roi[i, j] = images[..., top:bottom, left:right]
-                    button_radius = best_circle[:, 2]
+                    button_radius = best_circle[2]
 
                 x_rel = round(x[i, j]) - left
                 y_rel = round(y[i, j]) - top
