@@ -27,8 +27,8 @@ def test_one_by_one_chip(chip_1x1):
         mg.microfluidic_chip(
             data=chip_1x1,
             shape=(1, 1),
-            min_button_radius=8,
-            max_button_radius=12,
+            min_button_diameter=16,
+            max_button_diameter=32,
             overlap=0,
             row_dist=100,
             col_dist=100,
