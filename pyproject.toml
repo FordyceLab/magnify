@@ -15,6 +15,7 @@ dependencies = [
     "scipy>=1.9.0",
     "pandas>=2.0.3",
     "plotly>=5.18.0",
+    "pyqt5",
     "tifffile>=2021.11.2",
     "dask_image>=2024.5.3",
     "tqdm>=4.64",
