@@ -246,7 +246,6 @@ def mrbles(
     data: ArrayLike | str,
     spectra: str | PathLike | StringIO,
     codes: str | PathLike | StringIO,
-    debug: bool = False,
     times: Sequence[int] | None = None,
     channels: Sequence[str] | None = None,
     flatfield: float = 1.0,
@@ -351,7 +350,6 @@ def mrbles(
     This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using channel 0 for analysis, and matching bead spectral signatures against `my_spectra` and `my_codes`.
     """
     pipe = mrbles_pipe(
-        debug=debug,
         spectra=spectra,
         codes=codes,
         flatfield=flatfield,
@@ -377,7 +375,6 @@ def mrbles(
 def mrbles_pipe(
     spectra: str | PathLike | StringIO,
     codes: str | PathLike | StringIO,
-    debug: bool = False,
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
@@ -420,7 +417,6 @@ def beads(
     data: ArrayLike | str,
     times: Sequence[int] | None = None,
     channels: Sequence[str] | None = None,
-    debug: bool = False,
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
@@ -455,8 +451,6 @@ def beads(
     channels :
         A list or sequence of names to assign to each channel. If not specified, the channels will be initialized
         to 0, 1, 2, etc.
-    debug :
-        If True, set the logger to debug mode for error logging.
     flatfield :
         The flatfield correction factor or path to a flatfield correction image. If a file path is provided,
         the image will be loaded from the specified file (e.g., a TIFF or Zarr file). Flatfield correction
@@ -522,7 +516,6 @@ def beads(
     """
 
     pipe = beads_pipe(
-        debug=debug,
         flatfield=flatfield,
         darkfield=darkfield,
         overlap=overlap,
@@ -544,7 +537,6 @@ def beads(
 
 
 def beads_pipe(
-    debug: bool = False,
     flatfield: float = 1.0,
     darkfield: float = 0.0,
     overlap: int = 102,
@@ -584,7 +576,6 @@ def image(
     data: ArrayLike | str,
     times: Sequence[int] | None = None,
     channels: Sequence[str] | None = None,
-    debug: bool = False,
     overlap: int = 102,
     rotation: float = 0,
     squeeze: bool = True,
@@ -608,8 +599,6 @@ def image(
     channels :
         A list or sequence of names to assign to each channel. If not specified, the channels will be initialized
         to 0, 1, 2, etc.
-    debug :
-        If True, set the logger to debug mode for error logging.
     overlap :
         The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
     rotation :
@@ -642,7 +631,6 @@ def image(
     ... )
     """
     pipe = image_pipe(
-        debug=debug,
         overlap=overlap,
         rotation=rotation,
         squeeze=squeeze,
@@ -653,7 +641,6 @@ def image(
 
 
 def image_pipe(
-    debug: bool = False,
     overlap: int = 102,
     rotation: float = 0,
     squeeze: bool = True,

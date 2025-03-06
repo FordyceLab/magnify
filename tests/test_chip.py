@@ -42,5 +42,5 @@ def test_one_by_one_chip(chip_1x1):
     assert xp.roi.sizes["mark_row"] == 1
     assert xp.roi.sizes["mark_col"] == 1
     radius = 10
-    assert 0.8 * radius < np.sqrt(xp.fg.sum().values.item() / np.pi) < 1.2 * radius
+    assert 0.95 * radius < np.sqrt(xp.fg.sum().values.item() / np.pi) < 1.05 * radius
     assert 0.95 * 100 < xp.x.squeeze().values.item() < 1.05 * 100

@@ -12,7 +12,7 @@ import xarray as xr
 from numba import prange
 
 import magnify.registry as registry
-from magnify import logger, utils
+from magnify import utils
 from magnify.plot.vis import InteractiveUI
 
 
@@ -688,7 +688,7 @@ def regress_clusters(
         if len(x) > 1:
             slopes[i], intercepts[i], _, _, _ = scipy.stats.linregress(x, y)
         elif (i == 0 or i == num_clusters - 1) and ideal_num_points[i] >= 2:
-            logger.warning(
+            print(
                 "Boundary cluster has fewer than 2 points."
                 "The chip is unlikely to be segmented correctly."
             )
@@ -733,7 +733,6 @@ def find_circles(
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
     img = cv.GaussianBlur(img, (5, 5), 0)
-    logger.debug("Blurred Image", img)
 
     # Step 2: Find edges from image gradients.
     dx = cv.Scharr(img, ddepth=cv.CV_32F, dx=1, dy=0)

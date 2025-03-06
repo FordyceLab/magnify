@@ -7,7 +7,6 @@ import confection
 import xarray as xr
 from numpy.typing import ArrayLike
 
-import magnify.logger as logger
 import magnify.registry as registry
 import magnify.utils as utils
 
@@ -17,11 +16,6 @@ class Pipeline:
         self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(reader)()
         self.config = confection.Config(config)
         self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
-
-        if "debug" in self.config and self.config["debug"]:
-            logger.log_level = logging.DEBUG
-        else:
-            logger.log_level = logging.INFO
 
     def __call__(
         self,
