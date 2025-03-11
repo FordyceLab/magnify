@@ -592,8 +592,8 @@ class BeadFinder:
 
     @registry.components.register("find_beads")
     def make(
-        min_bead_radius: int,
-        max_bead_radius: int,
+        min_bead_diameter: int,
+        max_bead_diameter: int,
         low_edge_quantile: float,
         high_edge_quantile: float,
         num_iter: int,

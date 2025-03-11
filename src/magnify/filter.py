@@ -81,7 +81,7 @@ def filter_leaky_buttons(assay: xr.Dataset, search_channel: str | list[str] | No
     valid = assay.valid.to_numpy()
     rows = assay.mark_row.to_numpy()
     for channel in search_channels:
-        sub_roi = assay.sel(channel=channel, time=0).roi.compute()
+        sub_roi = assay.isel(time=0).sel(channel=channel).roi.compute()
         # Compute the intensity differences between every pair of backgrounds on the first timestep.
         bg = sub_roi.where(sub_roi.bg).median(dim=["roi_x", "roi_y"]).compute()
         bg_n = bg.to_numpy().flatten()
