@@ -31,7 +31,7 @@ class ButtonFinder:
         cluster_penalty: float,
         roi_length: int | None,
         progress_bar: bool,
-        search_timestep: list[int] | None,
+        search_timestep: int | list[int],
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
@@ -48,7 +48,7 @@ class ButtonFinder:
         self.roi_length = roi_length if roi_length is not None else round(1.2 * chamber_diameter)
         self.progress_bar = progress_bar
         self.gui = InteractiveUI() if interactive else None
-        self.search_timesteps = sorted(utils.to_list(search_timestep)) if search_timestep else [0]
+        self.search_timesteps = sorted(utils.to_list(search_timestep))
         self.search_channels = utils.to_list(search_channel)
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
@@ -400,7 +400,7 @@ class ButtonFinder:
         cluster_penalty: float,
         roi_length: int,
         progress_bar: bool,
-        search_timestep: list[int] | None,
+        search_timestep: int | list[int],
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
@@ -433,7 +433,7 @@ class BeadFinder:
         num_iter: int,
         min_roundness: float,
         roi_length: int | None,
-        search_timestep: int,
+        search_timestep: int | list[int],
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
@@ -599,7 +599,7 @@ class BeadFinder:
         num_iter: int,
         min_roundness: float,
         roi_length: int,
-        search_timestep: int,
+        search_timestep: int | list[int],
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
