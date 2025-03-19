@@ -50,6 +50,8 @@ def roishow(xp: xr.Dataset):
 def imshow(xp: xr.Dataset):
     settings = napari.settings.get_settings()
     settings.appearance.layer_tooltip_visibility = True
+    if "mark_row" in xp.dims and "mark_col" in xp.dims and "mark" not in xp.dims:
+        xp = xp.stack(mark=("mark_row", "mark_col"))
     xp = xp.transpose(..., "im_y", "im_x")
     img = xp.image
     if "channel" in img.dims:
@@ -114,6 +116,7 @@ def imshow(xp: xr.Dataset):
         viewer.add_labels(
             fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
         )
+        viewer.layers["fg"].contour = 2
         props["mark"] = np.repeat(props["mark"], roi_stack.sizes["extra_dims"])
         props["tag"] = np.repeat(props["tag"], roi_stack.sizes["extra_dims"])
         viewer.add_shapes(
@@ -131,7 +134,6 @@ def imshow(xp: xr.Dataset):
             },
             properties=props,
         )
-
     # Make sure dimension sliders get initialized to be 0.
     viewer.dims.current_step = (0,) * len(img.shape)
 
