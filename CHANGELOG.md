@@ -1,14 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+### Fixed
+
+### Removed
+
+### Updated
+
 ## Magnify 0.11.5 (20 March 2025)
 
 ### Added
+ - Add the option to specify the left or top boundaries of a chip when calling `microfluidic_chip`. [a6a0ad6](https://github.com/FordyceLab/magnify/commit/a6a0ad64be723be07e573c3146c683a026bdc8b9)
+ - Add support for [BaSiC](https://github.com/peng-lab/BaSiCPy) correction. Because BaSiCPy restricts the version of many dependencies we intentionally don't add basicpy as a dependency for magnify. [938e020](https://github.com/FordyceLab/magnify/commit/938e0207e4ccca5d767d3eb44e508e2b2b140280)
 
 
 ## Magnify 0.11.4 (19 March 2025)
 
 ### Fixed
- - Set the default value of `roi_length` in `microfluidic_chip_pipe` to `None` rather than a fixed value. https://github.com/FordyceLab/magnify/commit/59a4eb48338d24ee3faeb31487940d5061978db5 and [08d8f82](https://github.com/FordyceLab/magnify/commit/08d8f82abb0e194e27e8def9b6e6c444a8a29c97) #59a4eb4.
+ - Set the default value of `roi_length` in `microfluidic_chip_pipe` to `None` rather than a fixed value. [59a4eb4](https://github.com/FordyceLab/magnify/commit/59a4eb48338d24ee3faeb31487940d5061978db5) and [08d8f82](https://github.com/FordyceLab/magnify/commit/08d8f82abb0e194e27e8def9b6e6c444a8a29c97).
 
 ### Removed
  - Dropped pyqt dependencies since this often causes conflicts with prior QT installations. [f8e8cc6](https://github.com/FordyceLab/magnify/commit/f8e8cc67a1838ab7ecb592af4f1b104f122b077d)
