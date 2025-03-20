@@ -47,6 +47,8 @@ def microfluidic_chip(
     min_button_diameter: int = 8,
     max_button_diameter: int = 30,
     chamber_diameter: int = 60,
+    top_chamber: int | None = None,
+    left_chamber: int | None = None,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
@@ -103,6 +105,8 @@ def microfluidic_chip(
         The minimum, maximum diameter (in pixels) for detecting buttons in the image.
     chamber_diameter :
         The diameter (in pixels) of the chamber around each button.
+    top_chamber, left_chamber :
+        The pixel offset of the edge of the top/leftmost chamber on the chip. If set to `None` then we will automatically find the offset.
     low_edge_quantile, high_edge_quantile :
         The lower, upper quantile for edge detection, used to identify the dimmest edges when detecting buttons.
     num_iter :
@@ -141,7 +145,6 @@ def microfluidic_chip(
     - 'rotate' : Rotates the stitched image by the specified angle.
     - 'find_buttons' : Detects buttons based on edge detection and clustering.
     - 'filter_expression' : Filters buttons based on foreground-background contrast differences using a minimum contrast threshold.
-    - 'filter_nonround' : Filters out buttons that do not meet the roundness criteria.
     - 'filter_leaky' : Removes buttons that are determined to be leaky or poorly segmented.
     - 'drop' : Optionally removes unnecessary tiles and simplifies the dataset based on the `squeeze`, `roi_only`, and `drop_tiles` options.
 
@@ -165,6 +168,8 @@ def microfluidic_chip(
         min_button_diameter=min_button_diameter,
         max_button_diameter=max_button_diameter,
         chamber_diameter=chamber_diameter,
+        top_chamber=top_chamber,
+        left_chamber=left_chamber,
         low_edge_quantile=low_edge_quantile,
         high_edge_quantile=high_edge_quantile,
         num_iter=num_iter,
@@ -194,6 +199,8 @@ def microfluidic_chip_pipe(
     min_button_diameter: int = 8,
     max_button_diameter: int = 30,
     chamber_diameter: int = 60,
+    top_chamber: int | None = None,
+    left_chamber: int | None = None,
     low_edge_quantile: float = 0.1,
     high_edge_quantile: float = 0.9,
     num_iter: int = 5000000,
@@ -235,7 +242,6 @@ def microfluidic_chip_pipe(
     pipe.add_pipe("rotate")
     pipe.add_pipe("find_buttons")
     pipe.add_pipe("filter_expression")
-    pipe.add_pipe("filter_nonround")
     pipe.add_pipe("filter_leaky")
     pipe.add_pipe("drop")
 

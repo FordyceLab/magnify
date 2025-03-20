@@ -24,6 +24,8 @@ class ButtonFinder:
         min_button_diameter: int,
         max_button_diameter: int,
         chamber_diameter: int,
+        top_chamber: int | None,
+        left_chamber: int | None,
         low_edge_quantile: float,
         high_edge_quantile: float,
         num_iter: int,
@@ -40,6 +42,8 @@ class ButtonFinder:
         self.min_button_radius = math.floor(min_button_diameter / 2)
         self.max_button_radius = math.ceil(max_button_diameter / 2)
         self.chamber_radius = round(chamber_diameter / 2)
+        self.top_chamber = top_chamber
+        self.left_chamber = left_chamber
         self.low_edge_quantile = low_edge_quantile
         self.high_edge_quantile = high_edge_quantile
         self.num_iter = num_iter
@@ -203,13 +207,10 @@ class ButtonFinder:
 
     def find_centers(self, images: xr.DataArray, assay: xr.Dataset):
         points = np.empty((0, 2))
-        min_button_dist = round(min(self.row_dist, self.col_dist) / 2 - self.max_button_radius)
-        if min_button_dist % 2 == 0:
-            # Certain opencv functions require an odd blocksize.
-            min_button_dist -= 1
+        min_button_dist = self.chamber_radius
         for image in images:
             image = utils.to_uint8(image.to_numpy())
-            # Step 1: Find an imperfect button mask by thresholding.
+            # Step 1: Find an imperfect button mask through circle finding.
             new_points = find_circles(
                 image,
                 low_edge_quantile=self.low_edge_quantile,
@@ -239,22 +240,43 @@ class ButtonFinder:
         points_per_row = (assay.tag != "").sum(dim="mark_col").to_numpy()
         points_per_col = (assay.tag != "").sum(dim="mark_row").to_numpy()
         num_rows, num_cols = assay.sizes["mark_row"], assay.sizes["mark_col"]
-        row_labels = cluster_1d(
-            y,
-            total_length=image.shape[0],
-            num_clusters=num_rows,
-            cluster_length=self.row_dist,
-            ideal_num_points=points_per_row,
-            penalty=self.cluster_penalty,
-        )
-        col_labels = cluster_1d(
-            x,
-            total_length=image.shape[1],
-            num_clusters=num_cols,
-            cluster_length=self.col_dist,
-            ideal_num_points=points_per_col,
-            penalty=self.cluster_penalty,
-        )
+        if self.top_chamber is None:
+            row_labels = cluster_1d(
+                y,
+                total_length=image.shape[0],
+                num_clusters=num_rows,
+                cluster_length=self.row_dist,
+                ideal_num_points=points_per_row,
+                penalty=self.cluster_penalty,
+            )
+        else:
+            # We have the top boundary of the chip so we can use that to find the optimal cluster.
+            row_labels = label_clusters(
+                y,
+                offset=self.top_chamber,
+                num_clusters=num_rows,
+                cluster_length=2 * self.chamber_radius,
+                cluster_gap=self.row_dist - 2 * self.chamber_radius,
+            )
+
+        if self.left_chamber is None:
+            col_labels = cluster_1d(
+                x,
+                total_length=image.shape[1],
+                num_clusters=num_cols,
+                cluster_length=self.col_dist,
+                ideal_num_points=points_per_col,
+                penalty=self.cluster_penalty,
+            )
+        else:
+            # We have the left boundary of the chip so we can use that to find the optimal cluster.
+            col_labels = label_clusters(
+                x,
+                offset=self.left_chamber,
+                num_clusters=num_cols,
+                cluster_length=2 * self.chamber_radius,
+                cluster_gap=self.col_dist - 2 * self.chamber_radius,
+            )
 
         # Exclude boundary points that didn't fall into clusters.
         in_cluster = (row_labels >= 0) & (col_labels >= 0)
@@ -393,12 +415,14 @@ class ButtonFinder:
         min_button_diameter: int,
         max_button_diameter: int,
         chamber_diameter: int,
+        top_chamber: int | None,
+        left_chamber: int | None,
         low_edge_quantile: float,
         high_edge_quantile: float,
         num_iter: int,
         min_roundness: float,
         cluster_penalty: float,
-        roi_length: int,
+        roi_length: int | None,
         progress_bar: bool,
         search_timestep: int | list[int],
         search_channel: str | list[str] | None,
@@ -410,6 +434,8 @@ class ButtonFinder:
             min_button_diameter=min_button_diameter,
             max_button_diameter=max_button_diameter,
             chamber_diameter=chamber_diameter,
+            top_chamber=top_chamber,
+            left_chamber=left_chamber,
             low_edge_quantile=low_edge_quantile,
             high_edge_quantile=high_edge_quantile,
             num_iter=num_iter,
@@ -660,6 +686,24 @@ def cluster_1d(
     labels[best_spans[0] : best_spans[-1]] = np.repeat(
         np.arange(num_clusters), best_spans[1:] - best_spans[:-1]
     )
+
+    # Return the labels based on the original order of the points.
+    return labels[np.argsort(permutation)]
+
+
+def label_clusters(points, offset, num_clusters, cluster_length, cluster_gap):
+    permutation = np.argsort(points)
+    points = points[permutation]
+    labels = np.ones_like(points, dtype=int) * -1
+    # Compute the boundaries of each cluster.
+    increments = [offset] + ([cluster_length, cluster_gap] * num_clusters)[:-1]
+    boundaries = np.cumsum(increments)
+    # Find start/end indexes of points in each cluster & gaps.
+    spans = np.searchsorted(points, boundaries)
+
+    # Assign labels to all points that fall within a cluster.
+    for i in range(num_clusters):
+        labels[spans[2 * i] : spans[2 * i + 1]] = i
 
     # Return the labels based on the original order of the points.
     return labels[np.argsort(permutation)]
