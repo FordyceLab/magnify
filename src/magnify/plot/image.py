@@ -56,12 +56,20 @@ def imshow(xp: xr.Dataset):
         xp = xp.stack(mark=("mark_row", "mark_col"))
     xp = xp.transpose(..., "im_y", "im_x")
     img = xp.image
+
+    multiscale = [img]
+    while multiscale[-1].sizes["im_x"] * multiscale[-1].sizes["im_y"] > 512**2:
+        multiscale.append(multiscale[-1][..., ::2, ::2])
+
     if "channel" in img.dims:
         viewer = napari.imshow(
-            img, channel_axis=img.dims.index("channel"), name=img.channel.to_numpy()
+            multiscale,
+            multiscale=True,
+            channel_axis=img.dims.index("channel"),
+            name=img.channel.to_numpy(),
         )[0]
     else:
-        viewer = napari.imshow(img)[0]
+        viewer = napari.imshow(multiscale, multiscale=True, name="image")[0]
 
     if "roi" in xp:
         # Initialize image metadata.
@@ -115,7 +123,6 @@ def imshow(xp: xr.Dataset):
         viewer.add_labels(
             fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
         )
-        viewer.layers["fg"].contour = 2
         props["mark"] = np.repeat(props["mark"], roi_stack.sizes["extra_dims"])
         props["tag"] = np.repeat(props["tag"], roi_stack.sizes["extra_dims"])
         viewer.add_shapes(
@@ -132,6 +139,7 @@ def imshow(xp: xr.Dataset):
                 "visible": False,
             },
             properties=props,
+            visible=False,
         )
     # Make sure dimension sliders get initialized to be 0.
     viewer.dims.current_step = (0,) * len(img.shape)
