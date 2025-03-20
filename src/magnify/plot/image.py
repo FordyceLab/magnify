@@ -3,8 +3,10 @@ from __future__ import annotations
 import napari
 import napari.settings
 import napari.utils
+import numba
 import numpy as np
 import xarray as xr
+from numba import prange
 
 import magnify.utils as utils
 
@@ -71,10 +73,6 @@ def imshow(xp: xr.Dataset):
             roi_stack = xp.roi.expand_dims("extra_dims").compute()
 
         roi_stack = roi_stack.transpose("mark", "extra_dims", "roi_y", "roi_x")
-        fg_labels = np.zeros(
-            (roi_stack.sizes["extra_dims"], xp.sizes["im_y"], xp.sizes["im_x"]),
-            dtype=int,
-        )
         roi_contours = np.zeros(
             (
                 roi_stack.sizes["mark"],
@@ -84,28 +82,29 @@ def imshow(xp: xr.Dataset):
             ),
             dtype=int,
         )
-        for i, mark in enumerate(roi_stack.mark):
-            for j, d in enumerate(roi_stack.extra_dims):
-                m = roi_stack.sel(mark=mark, extra_dims=d)
+        xs = roi_stack.x.to_numpy().astype(int)
+        ys = roi_stack.y.to_numpy().astype(int)
+        tblr = np.zeros((roi_stack.sizes["mark"], roi_stack.sizes["extra_dims"], 4), dtype=int)
+        for i in range(roi_stack.sizes["mark"]):
+            for j in range(roi_stack.sizes["extra_dims"]):
                 # Get the centers and the bounds of the bounding box.
                 top, bottom, left, right = utils.bounding_box(
-                    m.x.astype(int).item(),
-                    m.y.astype(int).item(),
+                    xs[i, j],
+                    ys[i, j],
                     roi_stack.sizes["roi_y"],
                     img.sizes["im_x"],
                     img.sizes["im_y"],
                 )
+                tblr[i, j] = top, bottom, left, right
                 # Set the roi bounding box.
                 roi_contours[i, j, :, :-2] = np.unravel_index(j, extra_dim_shape)
                 roi_contours[i, j, :, -2:] = np.array(
                     [[top, left], [top, right], [bottom, right], [bottom, left]],
                     dtype=int,
                 )
-                # Set the foreground label in image coordinates.
-                fg = m.fg.to_numpy()
-                fg_labels[j, top:bottom, left:right] = (i + 1) * fg + fg_labels[
-                    j, top:bottom, left:right
-                ] * (1 - fg)
+
+        # Set the foreground label in image coordinates.
+        fg_labels = roi_to_image_labels(roi_stack.fg.to_numpy(), tblr, img.shape[-2:])
 
         fg_labels = fg_labels.reshape(img.shape)
         roi_contours = roi_contours.reshape(-1, 4, len(extra_dims) + 2)
@@ -138,3 +137,17 @@ def imshow(xp: xr.Dataset):
     viewer.dims.current_step = (0,) * len(img.shape)
 
     return viewer
+
+
+@numba.njit(parallel=True)
+def roi_to_image_labels(roi_masks, bboxes, img_shape):
+    img_labels = np.zeros((roi_masks.shape[1],) + img_shape, dtype=np.int32)
+    for i in range(roi_masks.shape[0]):
+        for j in prange(roi_masks.shape[1]):
+            mask = roi_masks[i, j]
+            top, bottom, left, right = bboxes[i, j]
+            img_labels[j, top:bottom, left:right] = (i + 1) * mask + img_labels[
+                j, top:bottom, left:right
+            ] * (1 - mask)
+
+    return img_labels
