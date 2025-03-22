@@ -199,9 +199,10 @@ class ButtonFinder:
             assay.sizes["roi_x"],
         ]
         # Cache the rechunked array to prevent delays.
-        assay["roi"] = assay.roi.chunk(chunk_sizes).mg.cache()
-        assay["fg"] = assay.fg.chunk(chunk_sizes).mg.cache()
-        assay["bg"] = assay.bg.chunk(chunk_sizes).mg.cache()
+        assay["roi"] = assay.roi.chunk(chunk_sizes)
+        assay["fg"] = assay.fg.chunk(chunk_sizes)
+        assay["bg"] = assay.bg.chunk(chunk_sizes)
+        assay.mg.cache(["roi", "fg", "bg"])
 
         return assay
 
@@ -604,9 +605,7 @@ class BeadFinder:
                 roi[j] = image[..., top:bottom, left:right]
             assay.roi[:, i] = roi
 
-        assay["roi"] = assay.roi.mg.cache()
-        assay["fg"] = assay.fg.mg.cache()
-        assay["bg"] = assay.bg.mg.cache()
+        assay.mg.cache(["roi", "fg", "bg"])
         assay = assay.assign_coords(
             valid=(
                 ("mark", "time"),

@@ -72,7 +72,7 @@ def basic_correct(xp: xr.Dataset):
         tiles = da.map_blocks(transform, tiles.data, dtype=tiles.dtype)
         xp["tile"].loc[{"channel": channel}] = tiles
 
-    xp["tile"] = xp.tile.mg.cache()
+    xp.mg.cache("tile")
     return xp
 
 

@@ -25,10 +25,8 @@ class Stitcher:
         images = images.transpose("channel", "time", "im_y", "im_x")
 
         # Rechunk the array so each chunk is a single tile and cache the intermediate results.
-        assay["image"] = images.chunk(
-            (1, 1, assay.sizes["tile_y"], assay.sizes["tile_x"])
-        ).mg.cache()
-
+        assay["image"] = images.chunk((1, 1, assay.sizes["tile_y"], assay.sizes["tile_x"]))
+        assay.mg.cache("image")
         return assay
 
     @components.register("stitch")
