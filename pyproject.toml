@@ -19,8 +19,8 @@ dependencies = [
     "dask_image>=2024.5.3",
     "tqdm>=4.64",
     "types-tqdm>=4.64",
-    "xarray[io]>=2023.01.0",
-    "dask[complete]>=2022.02.0",
+    "xarray[io]>=2025.01.0",
+    "dask[complete]>=2025.02.0",
     "catalogue>=2.0.8",
     "beautifulsoup4>=4.10.0",
     "lxml>=5.0.0",
@@ -29,8 +29,8 @@ dependencies = [
     "numba>=0.58.1",
     "matplotlib>=3.9.0",
     "seaborn>=0.13.0",
-    "napari>=0.4.16",
-    "zarr < 3.0.0",
+    "napari>=0.5.0",
+    "zarr >= 3.0.0",
 ]
 
 [dependency-groups]
