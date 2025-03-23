@@ -95,11 +95,11 @@ class ButtonFinder:
         )
         assay = assay.assign_coords(
             fg=(
-                ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
+                ("mark_row", "mark_col", "time", "roi_y", "roi_x"),
                 da.empty_like(
                     roi,
                     dtype=bool,
-                ),
+                )[:, 0],
             ),
             bg=(
                 ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
@@ -130,8 +130,8 @@ class ButtonFinder:
             # Compute the roi, foreground and background masks for all buttons.
             (
                 assay.roi[:, :, :, t],
-                assay.fg[:, :, :, t],
-                assay.bg[:, :, :, t],
+                assay.fg[:, :, t],
+                assay.bg[:, :, t],
                 assay.x[..., t],
                 assay.y[..., t],
                 assay.valid[..., t],
@@ -175,8 +175,8 @@ class ButtonFinder:
                     roi[i, j] = images[..., top:bottom, left:right]
 
             assay.roi[:, :, :, t] = roi
-            assay.fg[:, :, :, t] = assay.fg[:, :, :, copy_t]
-            assay.bg[:, :, :, t] = assay.bg[:, :, :, copy_t]
+            assay.fg[:, :, t] = assay.fg[:, :, copy_t]
+            assay.bg[:, :, t] = assay.bg[:, :, copy_t]
             assay.x[..., t] = x
             assay.y[..., t] = y
             assay.valid[..., t] = assay.valid[..., copy_t]
@@ -319,7 +319,7 @@ class ButtonFinder:
         y = assay.y[:, :, t].to_numpy()
         valid = assay.valid[:, :, t].to_numpy()
         roi = np.empty_like(assay.roi.isel(time=t))
-        fg = np.empty_like(roi, dtype=bool)
+        fg = np.empty_like(assay.fg.isel(time=t), dtype=bool)
         bg = np.empty_like(fg)
         search_channel_idxs = [
             list(assay.channel.to_numpy()).index(c) for c in self.search_channels
@@ -542,12 +542,12 @@ class BeadFinder:
         assay["roi"] = (("mark", "channel", "time", "roi_y", "roi_x"), roi)
         assay = assay.assign_coords(
             fg=(
-                ("mark", "channel", "time", "roi_y", "roi_x"),
-                da.empty_like(roi, dtype=bool),
+                ("mark", "time", "roi_y", "roi_x"),
+                da.empty_like(roi, dtype=bool)[:, 0],
             ),
             bg=(
-                ("mark", "channel", "time", "roi_y", "roi_x"),
-                da.empty_like(roi, dtype=bool),
+                ("mark", "time", "roi_y", "roi_x"),
+                da.empty_like(roi, dtype=bool)[:, 0],
             ),
             x=(
                 ("mark", "time"),

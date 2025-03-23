@@ -73,33 +73,38 @@ def imshow(xp: xr.Dataset):
 
     if "roi" in xp:
         # Initialize image metadata.
-        extra_dims = [d for d in xp.roi.dims if d not in ["mark", "roi_y", "roi_x"]]
+        extra_dims = [d for d in xp.fg.dims if d not in ["mark", "roi_y", "roi_x"]]
         extra_dim_shape = [xp.sizes[d] for d in extra_dims]
         if len(extra_dims) > 0:
-            roi_stack = xp.roi.stack(extra_dims=extra_dims).compute()
+            fg_stack = xp.fg.stack(extra_dims=extra_dims).compute()
+            xs = xp.x.stack(extra_dims=extra_dims)
+            ys = xp.y.stack(extra_dims=extra_dims)
         else:
-            roi_stack = xp.roi.expand_dims("extra_dims").compute()
+            fg_stack = xp.fg.expand_dims("extra_dims").compute()
+            xs = xp.x.expand_dims("extra_dims")
+            ys = xp.y.expand_dims("extra_dims")
 
-        roi_stack = roi_stack.transpose("mark", "extra_dims", "roi_y", "roi_x")
+        fg_stack = fg_stack.transpose("mark", "extra_dims", "roi_y", "roi_x")
+        xs = xs.transpose("mark", "extra_dims").to_numpy().astype(int)
+        ys = ys.transpose("mark", "extra_dims").to_numpy().astype(int)
+
         roi_contours = np.zeros(
             (
-                roi_stack.sizes["mark"],
-                roi_stack.sizes["extra_dims"],
+                fg_stack.sizes["mark"],
+                fg_stack.sizes["extra_dims"],
                 4,
                 len(extra_dims) + 2,
             ),
             dtype=int,
         )
-        xs = roi_stack.x.to_numpy().astype(int)
-        ys = roi_stack.y.to_numpy().astype(int)
-        tblr = np.zeros((roi_stack.sizes["mark"], roi_stack.sizes["extra_dims"], 4), dtype=int)
-        for i in range(roi_stack.sizes["mark"]):
-            for j in range(roi_stack.sizes["extra_dims"]):
+        tblr = np.zeros((fg_stack.sizes["mark"], fg_stack.sizes["extra_dims"], 4), dtype=int)
+        for i in range(fg_stack.sizes["mark"]):
+            for j in range(fg_stack.sizes["extra_dims"]):
                 # Get the centers and the bounds of the bounding box.
                 top, bottom, left, right = utils.bounding_box(
                     xs[i, j],
                     ys[i, j],
-                    roi_stack.sizes["roi_y"],
+                    fg_stack.sizes["roi_y"],
                     img.sizes["im_x"],
                     img.sizes["im_y"],
                 )
@@ -112,9 +117,11 @@ def imshow(xp: xr.Dataset):
                 )
 
         # Set the foreground label in image coordinates.
-        fg_labels = roi_to_image_labels(roi_stack.fg.to_numpy(), tblr, img.shape[-2:])
+        fg_labels = roi_to_image_labels(fg_stack.to_numpy(), tblr, img.shape[-2:])
 
-        fg_labels = fg_labels.reshape(img.shape)
+        fg_labels = fg_labels.reshape(
+            img.isel(channel=0).shape if "channel" in img.dims else img.shape
+        )
         roi_contours = roi_contours.reshape(-1, 4, len(extra_dims) + 2)
         props = {
             "mark": [f"{mark.item()}" for mark in xp.mark],
@@ -123,8 +130,8 @@ def imshow(xp: xr.Dataset):
         viewer.add_labels(
             fg_labels, name="fg", properties={k: [None] + v for k, v in props.items()}
         )
-        props["mark"] = np.repeat(props["mark"], roi_stack.sizes["extra_dims"])
-        props["tag"] = np.repeat(props["tag"], roi_stack.sizes["extra_dims"])
+        props["mark"] = np.repeat(props["mark"], fg_stack.sizes["extra_dims"])
+        props["tag"] = np.repeat(props["tag"], fg_stack.sizes["extra_dims"])
         viewer.add_shapes(
             roi_contours,
             shape_type="rectangle",
