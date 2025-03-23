@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import cv2 as cv
-import numpy as np
 import xarray as xr
 
 import magnify.registry as registry
-import magnify.utils as utils
 
 
 @registry.component("drop")

@@ -1,32 +1,24 @@
-from __future__ import annotations
-
-import logging
 from typing import Callable, Sequence
 
-import confection
 import xarray as xr
 from numpy.typing import ArrayLike
 
 import magnify.registry as registry
-import magnify.utils as utils
 
 
 class Pipeline:
-    def __init__(self, reader: str, config: dict[str, dict[str, str]]):
+    def __init__(self, reader: str):
         self.reader: Callable[[ArrayLike | str], xr.Dataset] = registry.readers.get(reader)()
-        self.config = confection.Config(config)
-        self.components: list[Callable[[xr.Dataset], xr.Dataset]] = []
+        self.components: list[tuple[str, Callable[[xr.Dataset], xr.Dataset]]] = []
 
     def __call__(
         self,
         data: ArrayLike | str,
-        times: Sequence[int] | None = None,
-        channels: Sequence[str] | None = None,
     ) -> xr.Dataset | list[xr.Dataset]:
-        inputs = self.reader(data=data, times=times, channels=channels)
+        inputs = self.reader(data=data)
         assays = []
         for assay in inputs:
-            for name, component in self.components:
+            for _, component in self.components:
                 assay = component(assay)
 
             assays.append(assay)
@@ -43,9 +35,10 @@ class Pipeline:
         before: str | int | None = None,
         first: bool = False,
         last: bool = False,
+        **kwargs,
     ) -> None:
         component_factory = registry.components.get(name)
-        component = component_factory(**utils.valid_kwargs(self.config, component_factory))
+        component = component_factory(**kwargs)
 
         if after is None and before is None and not first and not last:
             last = True
@@ -64,6 +57,8 @@ class Pipeline:
             idx = after + 1
         elif isinstance(after, str):
             idx = [name for (name, _) in self.components].index(after) + 1
+        else:
+            raise ValueError("before/after must be a string or int.")
 
         self.components.insert(idx, new_element)
 

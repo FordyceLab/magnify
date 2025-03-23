@@ -27,8 +27,6 @@ class Reader:
     def __call__(
         self,
         data: str | xr.DataArray | xr.Dataset | Sequence[str | xr.DataArray | xr.Dataset],
-        times: Sequence[int] | None = None,
-        channels: Sequence[str] | None = None,
     ) -> Iterator[xr.Dataset]:
         data = [data] if isinstance(data, utils.PathLike | xr.DataArray | xr.Dataset) else data
         for d in data:
@@ -68,8 +66,6 @@ class Reader:
                 else:
                     xp = read_tiffs(
                         xp_dict,
-                        channels=channels,
-                        times=times,
                         name=xp_name,
                         meta_dict=meta_dict,
                     )
@@ -166,8 +162,6 @@ def extract_paths(pattern, **kwargs) -> dict[tuple[int, str, int, int], str]:
 
 def read_tiffs(
     xp_dict: dict[tuple[int, str, int, int], str],
-    channels: Sequence[str] | None,
-    times: Sequence[str] | None,
     name: str,
     meta_dict,
 ) -> xr.Dataset:
@@ -190,11 +184,9 @@ def read_tiffs(
         dims_in_path.append("tile_col")
         outer_shape += (len(col_idxs),)
 
-    # If the user didn't specify times or channels use the ones from the path.
-    if times is None and "time" in dims_in_path:
-        times = time_idxs
-    if channels is None and "channel" in dims_in_path:
-        channels = channel_idxs
+    # Use the time & channels from the path if it's available.
+    times = time_idxs if "time" in dims_in_path else None
+    channels = channel_idxs if "channel" in dims_in_path else None
 
     # Read in a single image to get the metadata stored within the file.
     with tifffile.TiffFile(next(iter(xp_dict.values()))) as tif:
@@ -241,7 +233,12 @@ def read_tiffs(
                 times = times[::stride]
             else:
                 times = [start_time]
-        if channels is None and tif.is_micromanager:
+
+        if (
+            channels is None
+            and tif.is_micromanager
+            and "ChNames" in tif.micromanager_metadata["Summary"]
+        ):
             channels = tif.micromanager_metadata["Summary"]["ChNames"]
 
         if "tile_pos" in dims_in_file:
