@@ -102,11 +102,11 @@ class ButtonFinder:
                 )[:, 0],
             ),
             bg=(
-                ("mark_row", "mark_col", "channel", "time", "roi_y", "roi_x"),
+                ("mark_row", "mark_col", "time", "roi_y", "roi_x"),
                 da.empty_like(
                     roi,
                     dtype=bool,
-                ),
+                )[:, 0],
             ),
             x=(
                 ("mark_row", "mark_col", "time"),
@@ -191,15 +191,16 @@ class ButtonFinder:
             math.ceil(chunk_bytes / (roi_bytes * assay.sizes["time"] * assay.sizes["channel"])),
             num_rows,
         )
-        chunk_sizes = [
-            mark_chunk_size,
-            assay.sizes["channel"],
-            assay.sizes["time"],
-            assay.sizes["roi_y"],
-            assay.sizes["roi_x"],
-        ]
+        chunk_sizes = {
+            "mark": mark_chunk_size,
+            "channel": assay.sizes["channel"],
+            "time": assay.sizes["time"],
+            "roi_y": assay.sizes["roi_y"],
+            "roi_x": assay.sizes["roi_x"],
+        }
         # Cache the rechunked array to prevent delays.
         assay["roi"] = assay.roi.chunk(chunk_sizes)
+        chunk_sizes.pop("channel")
         assay["fg"] = assay.fg.chunk(chunk_sizes)
         assay["bg"] = assay.bg.chunk(chunk_sizes)
         assay.mg.cache(["roi", "fg", "bg"])
