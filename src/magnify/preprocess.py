@@ -41,6 +41,16 @@ def standardize_format(xp: xr.Dataset | xr.DataArray) -> xr.Dataset:
     return xp
 
 
+@registry.component("rename_labels")
+def rename_labels(xp: xr.Dataset, **coords):
+    for coord_name, new_labels in coords.items():
+        if isinstance(new_labels, dict):
+            xp = xp.assign_coords({coord_name: xp[coord_name].to_series().replace(new_labels)})
+        else:
+            xp = xp.assign_coords({coord_name: new_labels})
+    return xp
+
+
 @registry.component("rotate")
 def rotate(xp: xr.Dataset, rotation=0):
     # TODO: Fix issue with rotation bug in dask.
