@@ -53,7 +53,6 @@ def microfluidic_chip(
     progress_bar: bool = False,
     search_timestep: int | list[int] = 0,
     search_channel: str | list[str] | None = None,
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
     interactive: bool = False,
@@ -109,8 +108,6 @@ def microfluidic_chip(
         as the closest searched timestep before it, or if there isn't one the closest timestep after it.
     search_channel :
         The channel or list of channels to use for button detection and expression filtering. If `None`, all channels will be used.
-    squeeze :
-        If True, removes any dimensions of length 1.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
@@ -127,13 +124,13 @@ def microfluidic_chip(
     -----
     This function uses a pipeline architecture to process image data. The steps in the pipeline consist of:
 
-    - 'identify_buttons' : Identifies buttons based on the provided `pinlist` or `shape` parameters and assigns valid markers.
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
+    - 'identify_buttons' : Identifies buttons based on the provided `pinlist` or `shape` parameters.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
-    - 'rotate' : Rotates the stitched image by the specified angle.
     - 'find_buttons' : Detects buttons based on edge detection and clustering.
-    - 'filter_expression' : Filters buttons based on foreground-background contrast differences using a minimum contrast threshold.
-    - 'filter_leaky' : Filters buttons that are determined to be leaky.
-    - 'drop' : Optionally removes tiles and simplifies the dataset based on the `squeeze`, `roi_only`, and `drop_tiles` options.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
 
     Examples
     --------
@@ -166,7 +163,6 @@ def microfluidic_chip(
         progress_bar=progress_bar,
         search_timestep=search_timestep,
         search_channel=search_channel,
-        squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
         interactive=interactive,
@@ -197,7 +193,6 @@ def microfluidic_chip_pipe(
     progress_bar: bool = False,
     search_timestep: int | list[int] = 0,
     search_channel: str | list[str] | None = None,
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
     interactive: bool = False,
@@ -222,6 +217,7 @@ def microfluidic_chip_pipe(
             )
 
     pipe = Pipeline("read")
+    pipe.add_pipe("standardize_format")
     pipe.add_pipe("identify_buttons", shape=shape, pinlist=pinlist, blank=blank)
     pipe.add_pipe("stitch", overlap=overlap)
     pipe.add_pipe("rotate", rotation=rotation)
@@ -245,7 +241,8 @@ def microfluidic_chip_pipe(
         search_channel=search_channel,
         interactive=interactive,
     )
-    pipe.add_pipe("drop", squeeze=squeeze, roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("drop", roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("restore_format")
 
     return pipe
 
@@ -266,7 +263,6 @@ def mrbles(
     roi_length: int | None = None,
     search_channel: str | list[str] | None = None,
     reference: str = "eu",
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
     interactive: bool = False,
@@ -303,8 +299,6 @@ def mrbles(
         The length in pixels of the region of interest (ROI) around detected beadeads. If None, the ROI length is set to 2 * `max_bead_diameter`.
     search_channel :
         The channel or list of channels to use for bead detection. If `None`, all channels will be used.
-    squeeze :
-        If True, removes any dimensions of length 1.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
@@ -313,8 +307,6 @@ def mrbles(
         If True, open a window to visualize and tune image processing step-by-step.
     reference :
         The reference material or standard used for spectral decoding. The default is "eu" (Europium), which is typically used in MRBLEs for comparison in spectral analysis.
-    squeeze :
-        If True, remove dimensions of size 1.
     roi_only :
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
@@ -330,11 +322,14 @@ def mrbles(
     Notes
     -----
     This function uses a pipeline architecture to process MRBLEs image data. The steps in the pipeline include:
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
     - 'flatfield_correct' : Applies flatfield and darkfield corrections to the image data.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
     - 'find_beads' : Detects beads based on specified diameter, roundness, and other parameters.
     - 'identify_mrbles' : Assign a code to each bead by matching their spectral signatures to the provided reference spectra.
-    - 'drop' : Optionally removes tiles and simplifies the dataset based on the `squeeze`, `roi_only`, and `drop_tiles` options.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
 
     Examples
     --------
@@ -359,7 +354,6 @@ def mrbles(
         roi_length=roi_length,
         search_channel=search_channel,
         reference=reference,
-        squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
         interactive=interactive,
@@ -382,7 +376,6 @@ def mrbles_pipe(
     roi_length: int | None = None,
     search_channel: str | list[str] | None = None,
     reference: str = "eu",
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
     interactive: bool = False,
@@ -396,6 +389,7 @@ def mrbles_pipe(
     For detailed information on how to use this pipeline, refer to :func:`mrbles`.
     """
     pipe = Pipeline("read")
+    pipe.add_pipe("standardize_format")
     pipe.add_pipe("flatfield_correct", flatfield=flatfield, darkfield=darkfield)
     pipe.add_pipe("stitch", overlap=overlap)
     pipe.add_pipe(
@@ -411,7 +405,8 @@ def mrbles_pipe(
         interactive=interactive,
     )
     pipe.add_pipe("identify_mrbles", spectra=spectra, codes=codes, reference=reference)
-    pipe.add_pipe("drop", squeeze=squeeze, roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("drop", roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("restore_format")
 
     return pipe
 
@@ -429,7 +424,6 @@ def beads(
     min_roundness: float = 0.3,
     roi_length: int | None = None,
     search_channel: str | list[str] | None = None,
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
     interactive: bool = False,
@@ -462,16 +456,12 @@ def beads(
         The length in pixels of the region of interest (ROI) around detected beadeads. If None, the ROI length is set to 2 * `max_bead_diameter`.
     search_channel :
         The channel or list of channels to use for bead detection. If `None`, all channels will be used.
-    squeeze :
-        If True, removes any dimensions of length 1.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
     interactive:
         If True, open a window to visualize and tune image processing step-by-step.
-    squeeze :
-        If True, remove dimensions of size 1.
     roi_only :
         If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
     drop_tiles :
@@ -488,10 +478,13 @@ def beads(
     -----
     This function uses a pipeline architecture to process image data. The steps in the pipeline include:
 
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
     - 'flatfield_correct' : Applies flatfield and darkfield corrections to the image data.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
-    - 'find_beads' : Detects beads in the image based on specified diameters and other detection parameters.
-    - 'drop' : Optionally removes tiles and simplifies the dataset based on the `squeeze`, `roi_only`, and `drop_tiles` options.
+    - 'find_beads' : Detects beads based on specified diameter, roundness, and other parameters.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
 
     Examples
     --------
@@ -506,6 +499,7 @@ def beads(
     This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using only channels 0 and 1, and detects beads with a diameter between 10 and 40 pixels.
     """
     pipe = beads_pipe(
+        flatfield=flatfield,
         darkfield=darkfield,
         overlap=overlap,
         min_bead_diameter=min_bead_diameter,
@@ -516,7 +510,6 @@ def beads(
         min_roundness=min_roundness,
         roi_length=roi_length,
         search_channel=search_channel,
-        squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
         interactive=interactive,
@@ -536,7 +529,6 @@ def beads_pipe(
     min_roundness: float = 0.3,
     roi_length: int | None = None,
     search_channel: str | list[str] | None = None,
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
     interactive: bool = False,
@@ -550,6 +542,7 @@ def beads_pipe(
     For detailed information on how to use this pipeline, refer to :func:`beads`.
     """
     pipe = Pipeline("read")
+    pipe.add_pipe("standardize_format")
     pipe.add_pipe("flatfield_correct", flatfield=flatfield, darkfield=darkfield)
     pipe.add_pipe("stitch", overlap=overlap)
     pipe.add_pipe(
@@ -564,7 +557,8 @@ def beads_pipe(
         search_chanel=search_channel,
         interactive=interactive,
     )
-    pipe.add_pipe("drop", squeeze=squeeze, roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("drop", roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("restore_format")
 
     return pipe
 
@@ -573,7 +567,6 @@ def image(
     data: ArrayLike | str,
     overlap: int = 102,
     rotation: float = 0,
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
 ) -> xr.Dataset | list[xr.Dataset]:
@@ -589,8 +582,6 @@ def image(
         - A sequence of file paths, `xarray.DataArray`, or `xarray.Dataset`.
     overlap :
         The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
-    squeeze :
-        If True, removes any dimensions of length 1.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
@@ -604,21 +595,19 @@ def image(
     -----
     This function uses a pipeline architecture to process image data. The steps in the pipeline include:
 
-    - 'stitch' : Stitch together image tiles based on the overlap parameter.
-    - 'rotate' : Rotate the image by the specified angle.
-    - 'drop' : Depending on the options for `squeeze`, `roi_only`, and `drop_tiles`, unnecessary or unused
-      tiles are removed, and the data is optionally simplified.
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
+    - 'stitch' : Stitches image tiles based on the overlap parameter.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
 
     Examples
     --------
-    >>> processed_image = image(
-    ...     data=my_image_data, channels=[0, 1], overlap=100, rotation=45, squeeze=True
-    ... )
+    >>> processed_image = image(data=my_image_data, channels=[0, 1], overlap=100, rotation=45)
     """
     pipe = image_pipe(
         overlap=overlap,
         rotation=rotation,
-        squeeze=squeeze,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
     )
@@ -628,7 +617,6 @@ def image(
 def image_pipe(
     overlap: int = 102,
     rotation: float = 0,
-    squeeze: bool = True,
     roi_only: bool = False,
     drop_tiles: bool = True,
 ) -> Pipeline:
@@ -641,7 +629,9 @@ def image_pipe(
     For detailed information on how to use this pipeline, refer to :func:`image`.
     """
     pipe = Pipeline("read")
+    pipe.add_pipe("standardize_format")
     pipe.add_pipe("stitch", overlap=overlap)
     pipe.add_pipe("rotate", rotation=rotation)
-    pipe.add_pipe("drop", squeeze=squeeze, roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("drop", roi_only=roi_only, drop_tiles=drop_tiles)
+    pipe.add_pipe("restore_format")
     return pipe

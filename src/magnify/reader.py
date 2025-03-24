@@ -31,7 +31,7 @@ class Reader:
         data = [data] if isinstance(data, utils.PathLike | xr.DataArray | xr.Dataset) else data
         for d in data:
             if isinstance(d, xr.Dataset | xr.DataArray):
-                yield standardize(d)
+                yield d
                 continue
 
             path_dict, meta_dict = extract_paths(
@@ -70,7 +70,7 @@ class Reader:
                         meta_dict=meta_dict,
                     )
 
-                yield standardize(xp)
+                yield xp
 
     @registry.readers.register("read")
     def make():
@@ -306,6 +306,10 @@ def read_tiffs(
         coords=coords,
         attrs={"name": name},
     )
+    # Transpose dimensions into a standard order.
+    xp = xp.transpose(
+        "channel", "time", "tile_row", "tile_col", "tile_y", "tile_x", missing_dims="ignore"
+    )
 
     # Add any metadata coordinates specified by the user.
     for (meta_name, dim), meta_idxs_dict in meta_dict.items():
@@ -317,34 +321,5 @@ def read_tiffs(
 
         meta_idxs = [meta_idxs_dict[dim_idx] for dim_idx in dim_idxs]
         xp = xp.assign_coords({meta_name: (dim, meta_idxs)})
-
-    return xp
-
-
-def standardize(xp: xr.Dataset | xr.DataArray) -> xr.Dataset:
-    if isinstance(xp, xr.DataArray):
-        xp = xr.Dataset({"tile": xp}).assign_attrs(xp.attrs)
-
-    # Rename dimensions since we'll be adding new arrays whose names will conflict.
-    for old_name in ["x", "y", "row", "col"]:
-        if old_name in xp.tile.dims:
-            xp = xp.rename({old_name: "tile_" + old_name})
-
-    desired_order = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
-    # If we have additional dimensions stack them all into a single time dimension.
-    extra_dims = [dim for dim in xp.tile.dims if dim not in desired_order]
-    if len(extra_dims) > 0:
-        if "time" in xp.tile.dims:
-            # Rename the time dimension to avoid conflicts.
-            xp = xp.rename(time="__time__")
-            extra_dims.append("__time__")
-        xp = xp.stack(time=extra_dims)
-
-    # Reorder the dimensions so they're always consistent and add missing dimensions.
-    for dim in desired_order:
-        if dim not in xp.tile.dims:
-            xp["tile"] = xp.tile.expand_dims(dim)
-
-    xp = xp.transpose(*desired_order)
 
     return xp
