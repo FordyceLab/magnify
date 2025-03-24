@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import pathlib
 
@@ -7,7 +5,7 @@ import dask.array as da
 import tifffile
 import xarray as xr
 
-import magnify.registry as registry
+from magnify import registry, utils
 
 
 @registry.component("rotate")
@@ -91,4 +89,24 @@ def vertical_flip(xp: xr.Dataset):
         xp["image"] = xp.image.isel(im_y=slice(None, None, -1))
     else:
         xp["tile"] = xp.tile.isel(tile_y=slice(None, None, -1))
+    return xp
+
+
+@registry.component("circle_mask")
+def circle_mask(
+    xp: xr.Dataset,
+    center: tuple[int, int],
+    diameter: int,
+    mask_inner=False,
+):
+    radius = diameter // 2
+    img_shape = (xp.image.shape if "image" in xp else xp.tile.shape)[-2:]
+
+    mask = utils.circle(img_shape, center, radius, True)
+    mask = ~mask if mask_inner else mask
+    if "image" in xp:
+        xp["image"] *= mask
+    else:
+        xp["tile"] *= mask
+
     return xp
