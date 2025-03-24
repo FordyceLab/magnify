@@ -1,6 +1,7 @@
 __version__ = "0.11.5"
 
 __all__ = [
+    "component",
     "microfluidic_chip",
     "microfluidic_chip_pipe",
     "mrbles",
@@ -29,6 +30,7 @@ from .file import (
 from .registry import (
     beads,
     beads_pipe,
+    component,
     image,
     image_pipe,
     microfluidic_chip,
