@@ -26,29 +26,27 @@ def to_uint8(arr: np.ndarray) -> np.ndarray:
 
 
 def circle(
-    image_length: int,
-    row: int,
-    col: int,
+    image_shape: tuple[int, int],
+    center: tuple[int, int],
     radius: int,
     value: Any = 1,
     thickness: int = -1,
 ) -> np.ndarray:
-    image = np.zeros((image_length, image_length), dtype=np.uint8)
-    cv.circle(image, (col, row), radius, 1, thickness=thickness)
+    image = np.zeros(image_shape, dtype=np.uint8)
+    cv.circle(image, (center[1], center[0]), radius, 1, thickness=thickness)
     image = image.astype(type(value)) * value
     return image
 
 
 def annulus(
-    image_length: int,
-    row: int,
-    col: int,
+    image_shape: tuple[int, int],
+    center: tuple[int, int],
     outer_radius: int,
     inner_radius: int,
     value: Any = 1.0,
 ) -> np.ndarray:
-    outer_circle = circle(image_length, row, col, outer_radius, value)
-    inner_circle = circle(image_length, row, col, inner_radius, value)
+    outer_circle = circle(image_shape, center, outer_radius, value)
+    inner_circle = circle(image_shape, center, inner_radius, value)
     return outer_circle & ~inner_circle
 
 
@@ -115,7 +113,7 @@ def find_circles(
     min_roundness: float,
     min_dist: int,
     gui: InteractiveUI | None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
     img = cv.GaussianBlur(img, (5, 5), 0)
@@ -199,8 +197,10 @@ def find_circles(
 
         # Step 6: Remove duplicate circles that are too close to each other.
         perm = np.argsort(-scores)
+        circles, scores = circles[perm], scores[perm]
         if min_dist > 0:
-            circles = filter_neighbors(circles[perm], min_dist)
+            valid = filter_neighbors(circles, min_dist)
+            circles, scores = circles[valid], scores[valid]
 
         retval[0], retval[1] = circles, scores
         return [
@@ -257,7 +257,7 @@ def filter_neighbors(circles, min_dist):
     arr = -np.ones((circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32)
     valid = np.ones(len(circles), dtype=np.bool_)
     for i in range(len(circles)):
-        for j in prange(len(coords)):
+        for j in range(len(coords)):
             row = coords[j, 0] + circles[i, 0] + pad
             col = coords[j, 1] + circles[i, 1] + pad
             v = arr[row, col]
@@ -266,12 +266,12 @@ def filter_neighbors(circles, min_dist):
                 break
         if not valid[i]:
             continue
-        for j in prange(len(coords)):
+        for j in range(len(coords)):
             row = coords[j, 0] + circles[i, 0] + pad
             col = coords[j, 1] + circles[i, 1] + pad
             arr[row, col] = i
 
-    return circles[valid]
+    return valid
 
 
 @numba.njit(parallel=True)

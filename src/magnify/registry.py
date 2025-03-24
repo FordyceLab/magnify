@@ -407,7 +407,7 @@ def mrbles_pipe(
         num_iter=num_iter,
         min_roundness=min_roundness,
         roi_length=roi_length,
-        search_chanel=search_channel,
+        search_channel=search_channel,
         interactive=interactive,
     )
     pipe.add_pipe("identify_mrbles", spectra=spectra, codes=codes, reference=reference)

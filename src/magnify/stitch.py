@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import xarray as xr
 
 from magnify.registry import components
@@ -15,6 +13,7 @@ class Stitcher:
             : assay.tile.shape[-2] - self.overlap,
             : assay.tile.shape[-1] - self.overlap,
         ]
+
         # Move the time and channel axes last so we can focus on joining images.
         tiles = tiles.transpose("tile_row", "tile_col", "tile_y", "tile_x", "channel", "time")
         tiles = xr.concat(tiles, dim="tile_y")
@@ -25,7 +24,9 @@ class Stitcher:
         images = images.transpose("channel", "time", "im_y", "im_x")
 
         # Rechunk the array so each chunk is a single tile and cache the intermediate results.
-        assay["image"] = images.chunk((1, 1, assay.sizes["tile_y"], assay.sizes["tile_x"]))
+        assay["image"] = images.chunk(
+            {"channel": 1, "time": 1, "im_y": assay.sizes["tile_y"], "im_x": assay.sizes["tile_x"]}
+        )
         assay.mg.cache("image")
         return assay
 

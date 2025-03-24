@@ -6,8 +6,7 @@ import scipy
 import tqdm
 import xarray as xr
 
-import magnify.registry as registry
-from magnify import utils
+from magnify import registry, utils
 from magnify.plot.vis import InteractiveUI
 
 
@@ -384,18 +383,16 @@ class ButtonFinder:
 
                 # Set the background to be the annulus around a circle of fixed radius.
                 bg_mask = utils.annulus(
-                    self.roi_length,
-                    row=y_rel,
-                    col=x_rel,
+                    (self.roi_length, self.roi_length),
+                    (y_rel, x_rel),
                     outer_radius=self.chamber_radius,
                     inner_radius=self.max_button_radius,
                     value=1,
                 )
 
                 fg_mask = utils.circle(
-                    self.roi_length,
-                    row=y_rel,
-                    col=x_rel,
+                    (self.roi_length, self.roi_length),
+                    (y_rel, x_rel),
                     radius=button_radius,
                     value=1,
                 )
@@ -456,7 +453,6 @@ class BeadFinder:
         num_iter: int,
         min_roundness: float,
         roi_length: int | None,
-        search_timestep: int | list[int],
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
@@ -467,7 +463,6 @@ class BeadFinder:
         self.num_iter = num_iter
         self.min_roundness = min_roundness
         self.roi_length = roi_length if roi_length is not None else 2 * max_bead_diameter
-        self.search_timestep = search_timestep
         self.search_channels = utils.to_list(search_channel)
         self.gui = InteractiveUI() if interactive else None
 
@@ -477,9 +472,7 @@ class BeadFinder:
 
         beads = np.empty((0, 3))
         for search_channel in self.search_channels:
-            image = utils.to_uint8(
-                assay.image.isel(time=self.search_timestep).sel(channel=search_channel).to_numpy()
-            )
+            image = utils.to_uint8(assay.image.isel(time=0).sel(channel=search_channel).to_numpy())
             b = utils.find_circles(
                 image,
                 low_edge_quantile=self.low_edge_quantile,
@@ -556,18 +549,16 @@ class BeadFinder:
         )
 
         # Create a label array that contains the areas owned by each bead.
-        labels = circle_labels(beads.astype(int), assay.sizes["im_y"], assay.sizes["im_x"])
+        labels = utils.circle_labels(beads.astype(int), assay.sizes["im_y"], assay.sizes["im_x"])
 
-        # Compute the foreground and background masks for all buttons.
+        # Compute the foreground and background masks for all beads.
         # TODO: Don't assume beads don't move across timesteps.
         # Iterate over numpy arrays since indexing over xarrays is slow.
-        x = assay.x.isel(time=self.search_timestep).to_numpy()
-        y = assay.y.isel(time=self.search_timestep).to_numpy()
+        x = assay.x.isel(time=0).to_numpy()
+        y = assay.y.isel(time=0).to_numpy()
         fg = np.empty((num_beads,) + assay.fg.shape[2:], dtype=bool)
         bg = np.empty_like(fg)
-        image = (
-            assay.image.isel(time=self.search_timestep).sel(channel=self.search_channels).to_numpy()
-        )
+        image = assay.image.isel(time=0).sel(channel=self.search_channels).to_numpy()
         for i in range(num_beads):
             # Set the subimage region for this bead.
             top, bottom, left, right = utils.bounding_box(
@@ -620,7 +611,6 @@ class BeadFinder:
         num_iter: int,
         min_roundness: float,
         roi_length: int,
-        search_timestep: int | list[int],
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
@@ -632,7 +622,6 @@ class BeadFinder:
             num_iter=num_iter,
             min_roundness=min_roundness,
             roi_length=roi_length,
-            search_timestep=search_timestep,
             search_channel=search_channel,
             interactive=interactive,
         )
