@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Callable
 
 import xarray as xr
 from numpy.typing import ArrayLike
@@ -30,21 +30,36 @@ class Pipeline:
 
     def add_pipe(
         self,
-        name: str,
+        component: str | Callable[..., xr.Dataset],
+        name: str | None = None,
         after: str | int | None = None,
         before: str | int | None = None,
         first: bool = False,
         last: bool = False,
         **kwargs,
     ) -> None:
-        component_factory = registry.components.get(name)
-        component = component_factory(**kwargs)
+        if isinstance(component, str):
+            if name is None:
+                name = component
+            component_factory = registry.components.get(component)
+            func = component_factory(**kwargs)
+        else:
+            name = component.__name__ if name is None else name
+
+            def func(xp):
+                return component(xp, **kwargs)
 
         if after is None and before is None and not first and not last:
             last = True
         if (after is not None) + (before is not None) + first + last > 1:
             raise ValueError("Only one of after, before, first, and last can be set.")
-        new_element = (name, component)
+
+        # Check that the new component's name is unique
+        if self.components and name in next(zip(*self.components)):
+            raise ValueError(f"A component with the name '{name}' already exists in the pipeline.")
+
+        # Find where to insert the component.
+        new_element = (name, func)
         if first:
             idx = 0
         elif last:
