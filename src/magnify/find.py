@@ -481,7 +481,7 @@ class BeadFinder:
                 num_iter=self.num_iter,
                 min_radius=self.min_bead_radius,
                 max_radius=self.max_bead_radius,
-                min_dist=2 * self.min_bead_radius,
+                min_dist=self.min_bead_radius,
                 min_roundness=self.min_roundness,
                 gui=self.gui,
             )[0]
