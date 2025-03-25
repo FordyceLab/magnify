@@ -28,7 +28,8 @@ def restore_format(xp: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
     # Remove any dimensions that got added by standardize_format.
     standard_dims = ["channel", "time", "tile_row", "tile_col", "tile_y", "tile_x"]
     for dim in standard_dims:
-        if dim not in xp.__original_tile_dims__:
+        if dim not in xp.__original_tile_dims__ and dim in xp.dims:
+            print(xp)
             xp = xp.squeeze(dim)
 
     # Restore the original dimension order in the context of dimensions that didn't exist before.
