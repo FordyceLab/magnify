@@ -32,7 +32,6 @@ def test_one_by_one_chip(chip_1x1):
             overlap=0,
             row_dist=100,
             col_dist=100,
-            squeeze=False,
             num_iter=100,
         )
         .unstack()
