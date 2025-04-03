@@ -93,14 +93,14 @@ class ButtonFinder:
                 da.empty_like(
                     roi,
                     dtype=bool,
-                )[:, 0],
+                )[:, :, 0],
             ),
             bg=(
                 ("mark_row", "mark_col", "time", "roi_y", "roi_x"),
                 da.empty_like(
                     roi,
                     dtype=bool,
-                )[:, 0],
+                )[:, :, 0],
             ),
             x=(
                 ("mark_row", "mark_col", "time"),

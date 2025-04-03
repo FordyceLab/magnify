@@ -252,7 +252,7 @@ def mean_grad(thetas, edges, circles, perimeter_coords):
 def filter_neighbors(circles, min_dist):
     # TODO: Make this function nicer.
     if len(circles) == 0:
-        return np.array([], dtype=np.bool_)
+        return np.ones(0, dtype=np.bool_)
 
     coords = circle_points(min_dist, four_connected=True)
 
