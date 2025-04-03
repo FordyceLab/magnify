@@ -337,8 +337,7 @@ class ButtonFinder:
                 # Refine our button estimate unless we have a blank chamber.
                 if tag[i, j] != "":
                     for channel in search_channel_idxs:
-                        subimage = roi[i, j, channel]
-                        subimage -= subimage.min()
+                        subimage = utils.to_uint8(roi[i, j, channel])
                         circles, scores = utils.find_circles(
                             subimage,
                             low_edge_quantile=self.low_edge_quantile,
