@@ -41,4 +41,4 @@ def test_bead_single(bead_single):
     assert xp.roi.sizes["mark"] == 1
     radius = 10
     assert 0.95 * radius < np.sqrt(xp.fg.sum().values.item() / np.pi) < 1.05 * radius
-    assert 0.95 * 100 < xp.x.squeeze().values.item() < 1.05 * 100
+    assert 0.95 * 512 < xp.x.squeeze().values.item() < 1.05 * 512
