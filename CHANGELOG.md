@@ -11,6 +11,11 @@
 ### Updated
 
 
+## Magnify 0.12.1 (3 April 2025)
+
+### Fixed
+ - Fix the typo in registry.py that prevented `mg.beads` from running. [3e7d825](https://github.com/FordyceLab/magnify/commit/3e7d82583191f6cc751eb623fca226630e50f2e5)
+
 ## Magnify 0.12.0 (3 April 2025)
 
 ### Added
