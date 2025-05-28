@@ -13,6 +13,9 @@
 
 ## Magnify 0.12.1 (3 April 2025)
 
+### Updated
+ - Change opencv dependency to be opencv-headless. This fixes issues with Qt conflicts. [fcfda8c](https://github.com/FordyceLab/magnify/commit/fcfda8cf961191f257deca0505d64dff6589cbb8)
+
 ### Fixed
  - Fix the typo in registry.py that prevented `mg.beads` from running. [3e7d825](https://github.com/FordyceLab/magnify/commit/3e7d82583191f6cc751eb623fca226630e50f2e5)
 
