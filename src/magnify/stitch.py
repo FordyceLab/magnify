@@ -8,20 +8,16 @@ class Stitcher:
         self.overlap = overlap
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        # Only clip if overlap is non-zero
-        if self.overlap > 0:
-            clip = self.overlap//2
-            # Account for odd overlaps
-            remainder = self.overlap%2
-
-            # Adjust tiles
-            tiles = assay.tile[
-                ...,
-                clip:-clip+remainder,
-                clip:-clip+remainder,
-            ]
-        else:
-            tiles = assay.tile
+        # Take half of overlap from each edge
+        clip = self.overlap // 2
+        # Account for odd overlaps
+        remainder = self.overlap % 2
+        # Adjust tiles
+        tiles = assay.tile[
+            ...,
+            clip : assay.tile.shape[-2] - clip + remainder,
+            clip : assay.tile.shape[-1] - clip + remainder,
+        ]
 
         # Move the time and channel axes last so we can focus on joining images.
         tiles = tiles.transpose("tile_row", "tile_col", "tile_y", "tile_x", "channel", "time")
