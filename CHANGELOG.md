@@ -1,4 +1,4 @@
-# Changelog
+#Changelog
 
 ## Unreleased
 
@@ -10,6 +10,14 @@
 
 ### Updated
 
+
+## Magnify 0.12.2 (4 June 2025)
+
+### Fixed
+ - Fix an issue where cluster finding would fail when all clusters have the same mean in a given dimension. [48b9c77](https://github.com/FordyceLab/magnify/commit/48b9c77c67822a3c49b84ebb06508f6c352e88ce)
+
+### Updated
+ - Update image stitching to take the middle part of each image rather than the left. Thanks to @palmhjell. [#24](https://github.com/FordyceLab/magnify/pull/24)
 
 ## Magnify 0.12.1 (3 April 2025)
 
