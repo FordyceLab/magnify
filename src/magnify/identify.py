@@ -176,7 +176,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
     proportions[-1] = 1e-10
     proportions /= proportions.sum()
     log_cond_probs = np.empty((len(X), num_codes + 1))
-    log_cond_probs[:, -1] = -np.log(means.max(axis=0) - means.min(axis=0)).sum()
+    log_cond_probs[:, -1] = -np.log(X_r.max(axis=0) - X_r.min(axis=0)).sum()
     probs = None
 
     tag_names = np.append(tag_names, "outlier")
