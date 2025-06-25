@@ -5,6 +5,8 @@ from magnify.registry import components
 
 class Stitcher:
     def __init__(self, overlap: int = 102):
+        if overlap < 0:
+            raise ValueError("Overlap must be non-negative.")
         self.overlap = overlap
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
