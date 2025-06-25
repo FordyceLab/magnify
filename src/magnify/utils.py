@@ -18,6 +18,8 @@ PathLike = str | bytes | os.PathLike
 
 
 def to_uint8(arr: np.ndarray) -> np.ndarray:
+    if arr.size == 0:
+        return arr.astype(np.uint8)
     arr = arr.astype(float)
     arr = arr - np.min(arr)
     if np.max(arr) > 0:
@@ -48,11 +50,6 @@ def annulus(
     outer_circle = circle(image_shape, center, outer_radius, value)
     inner_circle = circle(image_shape, center, inner_radius, value)
     return outer_circle & ~inner_circle
-
-
-def contour_center(contour):
-    m = cv.moments(contour)
-    return m["m01"] / m["m00"], m["m10"] / m["m00"]
 
 
 @numba.jit(nopython=True)
