@@ -10,15 +10,22 @@ class Stitcher:
         self.overlap = overlap
 
     def __call__(self, assay: xr.Dataset) -> xr.Dataset:
-        # Take half of overlap from each edge
+        if "tile" not in assay:
+            raise AttributeError("Dataset must contain 'tile' data variable.")
+
+        if self.overlap >= assay.sizes["tile_y"] or self.overlap >= assay.sizes["tile_x"]:
+            raise ValueError(
+                f"Overlap ({self.overlap}) must be smaller than tile size ({assay.sizes['tile_y']}x{assay.sizes['tile_x']})."
+            )
+
+        # Take half of overlap from each edge.
         clip = self.overlap // 2
-        # Account for odd overlaps
+        # Account for odd overlaps.
         remainder = self.overlap % 2
-        # Adjust tiles
         tiles = assay.tile[
             ...,
-            clip : assay.tile.shape[-2] - clip + remainder,
-            clip : assay.tile.shape[-1] - clip + remainder,
+            clip : assay.tile.shape[-2] - clip - remainder,
+            clip : assay.tile.shape[-1] - clip - remainder,
         ]
 
         # Move the time and channel axes last so we can focus on joining images.
