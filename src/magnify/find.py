@@ -353,7 +353,6 @@ class ButtonFinder:
                             gui=None,
                         )
                         if len(circles) > 0:
-                            scores = scores
                             idx = np.argmax(scores)
                             if scores[idx] > best_score:
                                 best_circle = circles[idx]
