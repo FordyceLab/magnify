@@ -51,7 +51,10 @@ def identify_buttons(assay, shape=None, pinlist=None, blank=None):
 def identify_mrbles(assay, spectra, codes, reference="eu"):
     # Read in the dataframe of lanthanide spectra and make sure the reference lanthanide is first.
     spectra_df = pd.read_csv(spectra)
-    ref_idx = spectra_df[spectra_df["name"] == reference].index[0]
+    ref_matches = spectra_df[spectra_df["name"] == reference].index
+    if len(ref_matches) == 0:
+        raise ValueError(f"Reference lanthanide '{reference}' not found in spectra file")
+    ref_idx = ref_matches[0]
     spectra_df = spectra_df.reindex([ref_idx] + [i for i in range(len(spectra_df)) if i != ref_idx])
     lns = spectra_df["name"].to_list()
     num_lns = len(lns)
