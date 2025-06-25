@@ -78,5 +78,10 @@ class Pipeline:
         self.components.insert(idx, new_element)
 
     def remove_pipe(self, name: str) -> None:
-        idx = list(zip(*self.components))[0].index(name)
+        if not self.components:
+            raise ValueError(f"Cannot remove pipe '{name}': pipeline has no components")
+        component_names = list(zip(*self.components))[0]
+        if name not in component_names:
+            raise ValueError(f"Component '{name}' not found in pipeline")
+        idx = component_names.index(name)
         self.components.pop(idx)
