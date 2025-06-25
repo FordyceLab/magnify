@@ -31,6 +31,9 @@ class ButtonFinder:
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
+        if min_button_diameter > max_button_diameter:
+            raise ValueError("min_button_diameter must be <= max_button_diameter.")
+
         self.row_dist = row_dist
         self.col_dist = col_dist
         self.min_button_radius = math.floor(min_button_diameter / 2)
@@ -454,6 +457,9 @@ class BeadFinder:
         search_channel: str | list[str] | None,
         interactive: bool,
     ):
+        if min_bead_diameter > max_bead_diameter:
+            raise ValueError("min_bead_diameter must be <= max_bead_diameter.")
+
         self.min_bead_radius = math.floor(min_bead_diameter / 2)
         self.max_bead_radius = math.ceil(max_bead_diameter / 2)
         self.low_edge_quantile = low_edge_quantile
