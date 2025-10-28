@@ -2,6 +2,7 @@ import os
 import pathlib
 
 import dask.array as da
+import dask_image.ndinterp
 import tifffile
 import xarray as xr
 
@@ -53,10 +54,9 @@ def rename_labels(xp: xr.Dataset, **coords):
 
 @registry.component("rotate")
 def rotate(xp: xr.Dataset, rotation=0):
-    # TODO: Fix issue with rotation bug in dask.
-    # xp["image"].data = dask_image.ndinterp.rotate(
-    #     xp.image.data, rotation, axes=(-1, -2), reshape=False
-    # )
+    xp["image"].data = dask_image.ndinterp.rotate(
+        xp.image.data, rotation, axes=(-1, -2), reshape=False
+    )
     return xp
 
 
@@ -107,8 +107,7 @@ def basic_correct(xp: xr.Dataset):
             # Reshape to handle cases where each block isn't just a single tile.
             block = block.reshape(-1, block.shape[-2], block.shape[-1])
             block = model.transform(block)
-            block.reshape(init_shape)
-            return block
+            return block.reshape(init_shape)
 
         tiles = da.map_blocks(transform, tiles.data, dtype=tiles.dtype)
         xp["tile"].loc[{"channel": channel}] = tiles

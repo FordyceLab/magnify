@@ -235,7 +235,7 @@ class ButtonFinder:
         x = points[:, 1]
         y = points[:, 0]
 
-        # Step 3: Cluster the points into distinct rows and columns.
+        # Step 2: Cluster the points into distinct rows and columns.
         points_per_row = (assay.tag != "").sum(dim="mark_col").to_numpy()
         points_per_col = (assay.tag != "").sum(dim="mark_row").to_numpy()
         num_rows, num_cols = assay.sizes["mark_row"], assay.sizes["mark_col"]
@@ -282,7 +282,7 @@ class ButtonFinder:
         x, y = x[in_cluster], y[in_cluster]
         col_labels, row_labels = col_labels[in_cluster], row_labels[in_cluster]
 
-        # Step 4: Draw lines through each cluster.
+        # Step 3: Draw lines through each cluster.
         row_slope, row_intercepts = regress_clusters(
             x,
             y,
@@ -299,7 +299,7 @@ class ButtonFinder:
             ideal_num_points=points_per_col,
         )
 
-        # Step 5: Set button locations as the intersection of each line pair.
+        # Step 4: Set button locations as the intersection of each line pair.
         mark_y = (row_slope * col_intercepts[np.newaxis] + row_intercepts[:, np.newaxis]) / (
             1 - row_slope * col_slope
         )
