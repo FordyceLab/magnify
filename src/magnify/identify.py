@@ -169,7 +169,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
     # Initialize the Gaussian components.
     for i in range(num_codes):
         proportions[i] = np.sum(tag_idxs == i) + 1
-        means[i] = A * code_ratios[i] + p
+        means[i] = np.median(X_r[tag_idxs == i], axis=0)
         if proportions[i] > 1:
             covs[i] += np.cov(X_r[tag_idxs == i], rowvar=False)
 
