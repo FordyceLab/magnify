@@ -30,8 +30,8 @@ class Stitcher:
 
         # Move the time and channel axes last so we can focus on joining images.
         tiles = tiles.transpose("tile_row", "tile_col", "tile_y", "tile_x", "channel", "time")
-        tiles = xr.concat(tiles, dim="tile_y")
-        images = xr.concat(tiles, dim="tile_x")
+        tiles = xr.concat(tiles, dim="tile_y", coords="different", compat="equals")
+        images = xr.concat(tiles, dim="tile_x", coords="different", compat="equals")
         # Change the x and y dimension names to be about the images.
         images = images.rename(tile_y="im_y", tile_x="im_x")
         # Move the time and channel axes back to the front.
