@@ -7,19 +7,19 @@ authors = [
     {name = "Xinxian Tian", email = "cicitian887@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11, <3.14"
+requires-python = ">=3.11"
 
 dependencies = [
     "opencv-python-headless>=4.0",
     "numpy>=1.22.0",
     "scipy>=1.9.0",
-    "pandas>=2.0.3",
+    "pandas>=2.3.3",
     "plotly>=5.18.0",
     "tifffile>=2021.11.2",
     "dask_image>=2024.5.3",
     "tqdm>=4.64",
     "types-tqdm>=4.64",
-    "xarray[io]>=2025.01.0",
+    "xarray[io]>=2025.10.0",
     "dask[complete]>=2025.02.0",
     "catalogue>=2.0.8",
     "beautifulsoup4>=4.10.0",
@@ -35,6 +35,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "ipython>=9.6.0",
     "jupyterlab>=4.0.0",
     "mypy==1.0.1",
     "pre-commit==4.0.0",
@@ -46,30 +47,12 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.sdist]
-exclude = ["docs", "tests", "examples", "static"]
+requires = ["uv_build>=0.9.5"]
+build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.format]
 docstring-code-format = true
-
-[tool.mypy]
-python_version = "3.10"
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_return_any = true
-warn_redundant_casts = true
-strict_equality = true
-warn_unused_configs = true
-ignore_missing_imports = true
