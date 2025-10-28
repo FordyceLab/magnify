@@ -1,6 +1,6 @@
 [project]
 name = "magnify"
-version = "0.12.2"
+version = "0.12.3"
 description = "A microscopy image processing toolkit."
 authors = [
     {name = "Karl Krauth", email = "karl.krauth@gmail.com"},
@@ -36,6 +36,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipython>=9.6.0",
+    "jupyter>=1.1.1",
     "jupyterlab>=4.0.0",
     "mypy==1.0.1",
     "pre-commit==4.0.0",
