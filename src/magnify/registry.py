@@ -462,12 +462,6 @@ def beads(
         If True, removes the "tile" variable from the dataset after stitching.
     interactive:
         If True, open a window to visualize and tune image processing step-by-step.
-    roi_only :
-        If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
-    drop_tiles :
-        If True, removes the "tile" variable from the dataset after stitching.
-    interactive:
-        If True, open a window to visualize and tune image processing step-by-step.
 
     Returns
     -------
