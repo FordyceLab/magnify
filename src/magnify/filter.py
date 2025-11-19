@@ -14,18 +14,14 @@ def filter_expression(
     search_channel: str | list[str] | None = None,
     min_contrast: int | None = None,
 ):
-    if search_channel is None:
-        search_channels = assay.channel
-    else:
-        search_channels = utils.to_list(search_channel)
-
+    search_channels = assay.channel if search_channel is None else utils.to_list(search_channel)
     valid = xr.zeros_like(assay.valid, dtype=bool)
     for channel in search_channels:
         subassay = assay.isel(time=0).sel(channel=channel)
         fg = subassay.roi.where(subassay.fg).median(dim=["roi_x", "roi_y"]).compute()
         bg = subassay.roi.where(subassay.bg).median(dim=["roi_x", "roi_y"]).compute()
         if min_contrast is None:
-            # Compute the intensity differences between every pair of backgrounds on the first timestep.
+            # Compute intensity differences between every pair of backgrounds on the first timestep.
             bg_n = bg.to_numpy().flatten()
             diffs = bg_n[:, np.newaxis] - bg_n[np.newaxis, :]
             offdiag = np.ones_like(diffs, dtype=bool) & (~np.eye(len(diffs), dtype=bool))
@@ -47,11 +43,7 @@ def filter_nonround(
     min_roundness: float = 0.75,
     search_channel: str | list[str] | None = None,
 ):
-    if search_channel is None:
-        search_channels = assay.channel
-    else:
-        search_channels = utils.to_list(search_channel)
-
+    search_channels = assay.channel if search_channel is None else utils.to_list(search_channel)
     valid = assay.valid.to_numpy()
     for channel in search_channels:
         subassay = assay.isel(time=0).sel(channel=channel)
@@ -72,11 +64,7 @@ def filter_nonround(
 
 @registry.component("filter_leaky")
 def filter_leaky_buttons(assay: xr.Dataset, search_channel: str | list[str] | None = None):
-    if search_channel is None:
-        search_channels = assay.channel
-    else:
-        search_channels = utils.to_list(search_channel)
-
+    search_channels = assay.channel if search_channel is None else utils.to_list(search_channel)
     tag = assay.tag.to_numpy()
     valid = assay.valid.to_numpy()
     rows = assay.mark_row.to_numpy()

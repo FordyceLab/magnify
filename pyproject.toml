@@ -53,5 +53,22 @@ build-backend = "uv_build"
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    "W",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+
 [tool.ruff.format]
 docstring-code-format = true

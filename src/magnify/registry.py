@@ -68,46 +68,61 @@ def microfluidic_chip(
         - An `xarray.DataArray` or `xarray.Dataset` containing image data.
         - A sequence of file paths, `xarray.DataArray`, or `xarray.Dataset`.
     shape :
-        The shape of the button array, specifying the number of rows and columns in the image grid.
+        The shape of the button array, specifying the number of rows and columns in the
+        image grid.
     pinlist :
-        A file path to a CSV file that describes the tag to be assigned to each chamber on the chip. The CSV file must include
-        a column called `Indices` that contains row and column pairs in the format `(row, col)`, and a
-        `MutantID` column that contains the names of the buttons. Either `pinlist` or `shape` must be provided.
+        A file path to a CSV file that describes the tag to assign to each chamber on the
+        chip. The CSV file must include a column called `Indices` that contains row and
+        column pairs in the format `(row, col)`, and a `MutantID` column with the button
+        names. Either `pinlist` or `shape` must be provided.
     blank :
-        Values representing "blank" or non-expressed buttons in the pinlist, which will be replaced
-        with empty strings in the dataset. Defaults to `["", "blank", "BLANK"]`.
+        Values representing "blank" or non-expressed buttons in the pinlist, which will
+        be replaced with empty strings in the dataset. Defaults to `["", "blank",
+        "BLANK"]`.
     overlap :
-        The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
+        The number of pixels to exclude from the edges of adjacent tiles during the
+        stitching process.
     rotation :
         The degree of rotation to apply to the stitched image.
     row_dist, col_dist :
         The distance between rows/columns of buttons in pixels.
     chip_type :
-        The type of microfluidic chip that was imaged. Can be one of ["minichip"|"pc"|"ps"], if `chip_type` is not None then it will override `row_dist` and `col_dist`.
+        The type of microfluidic chip that was imaged. Can be one of
+        ["minichip"|"pc"|"ps"]. If `chip_type` is provided it overrides `row_dist` and
+        `col_dist`.
     min_button_diameter, max_button_diameter :
         The minimum/maximum diameter in pixels for detecting buttons in the image.
     chamber_diameter :
         The diameter in pixels of the chamber around each button.
     top_chamber, left_chamber :
-        The pixel offset of the edge of the top/leftmost chamber on the chip. If set to `None` the offset is automatically found.
+        The pixel offset of the edge of the top/leftmost chamber on the chip. If set to
+        `None` the offset is automatically found.
     low_edge_quantile, high_edge_quantile :
-        The lower/upper quantile for edge detection, used to identify the dimmest edges when detecting buttons. Must be between 0 and 1.
+        The lower/upper quantile for edge detection, used to identify the dimmest edges
+        when detecting buttons. Must be between 0 and 1.
     num_iter :
-        The maximum number of iterations to perform the button detection process using RANSAC. A higher value will take longer but will find buttons more accurately.
+        The maximum number of iterations to perform the button detection process using
+        RANSAC. A higher value takes longer but finds buttons more accurately.
     min_roundness :
-        The minimum roundness value for detected buttons. Buttons that do not meet this roundness threshold are excluded. Must be between 0 and 1.
+        The minimum roundness value for detected buttons. Buttons that do not meet this
+        threshold are excluded. Must be between 0 and 1.
     cluster_penalty :
-        A penalty number that balances two factors when identifying clusters: penalizing high inter-cluster variance and
-        penalizing deviations from the expected number of items in a cluster. A higher value places more emphasis on the second factor
+        A penalty number that balances two factors when identifying clusters: penalizing
+        high inter-cluster variance and penalizing deviations from the expected number of
+        items in a cluster. A higher value places more emphasis on the second factor.
     roi_length :
-        The length in pixels of the region of interest (ROI) around detected buttons. If None, the ROI length is set to 1.2 * `chamber_diameter`.
+        The length in pixels of the region of interest (ROI) around detected buttons. If
+        `None`, the ROI length is set to 1.2 * `chamber_diameter`.
     progress_bar :
-        If True, display a progress bar during processing to track the progress of the pipeline.
+        If True, display a progress bar during processing to track the progress of the
+        pipeline.
     search_timestep :
-        The timesteps on which to search for buttons. A timestep that isn't in search_timestep will use the same button locations
-        as the closest searched timestep before it, or if there isn't one the closest timestep after it.
+        The timesteps on which to search for buttons. A timestep that is not in
+        `search_timestep` uses button locations from the closest searched timestep before
+        it, or if there isn't one, the closest timestep after it.
     search_channel :
-        The channel or list of channels to use for button detection and expression filtering. If `None`, all channels will be used.
+        The channel or list of channels to use for button detection and expression
+        filtering. If `None`, all channels will be used.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
@@ -117,20 +132,26 @@ def microfluidic_chip(
 
     Returns
     -------
-    Processed image(s): xr.Dataset | list[xr.Dataset]
-        The processed image in xr.Dataset from executed pipeline as the outcome of the image pipeline workflow.
+    Processed image(s) : xr.Dataset | list[xr.Dataset]
+        The processed image in xr.Dataset from the executed pipeline as the outcome of
+        the image pipeline workflow.
 
     Notes
     -----
-    This function uses a pipeline architecture to process image data. The steps in the pipeline consist of:
-
-    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
-    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
-    - 'identify_buttons' : Identifies buttons based on the provided `pinlist` or `shape` parameters.
+    This function uses a pipeline architecture to process image data. The steps in the
+    pipeline consist of:
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated
+      metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for
+      downstream processing.
+    - 'identify_buttons' : Identifies buttons based on the provided `pinlist` or `shape`
+      parameters.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
     - 'find_buttons' : Detects buttons based on edge detection and clustering.
-    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
-    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only` and
+      `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was
+      read in as.
 
     Examples
     --------
@@ -138,7 +159,9 @@ def microfluidic_chip(
     ...     data=my_image_data, channels=[0], pinlist="pinlist.csv", overlap=100, rotation=45
     ... )
 
-    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, rotating the image by 45 degrees, using channel 0 for detection, and using the chamber layout from 'pinlist.csv'.
+    This processes `my_image_data` by stitching tiles with 100 pixels of overlap,
+    rotating the image by 45 degrees, using channel 0 for detection, and using the
+    chamber layout from 'pinlist.csv'.
     """
     pipe = microfluidic_chip_pipe(
         shape=shape,
@@ -198,7 +221,8 @@ def microfluidic_chip_pipe(
     interactive: bool = False,
 ) -> Pipeline:
     """
-    Build a Pipeline object that detects buttons in images of microfluidic chips and standardizes the resulting data in an xarray.Dataset.
+    Build a Pipeline object that detects buttons in images of microfluidic chips and
+    standardizes the resulting data in an xarray.Dataset.
 
     Reference
     -------
@@ -268,7 +292,8 @@ def mrbles(
     interactive: bool = False,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
-    Find MRBLEs(Microspheres with Ratiometric Barcode Lanthanide Encoding Beaads) in images and standardize the resulting data in an xarray.Dataset.
+    Find MRBLEs (Microspheres with Ratiometric Barcode Lanthanide Encoding Beads) in
+    images and standardize the resulting data in an xarray.Dataset.
 
     Parameters
     ----------
@@ -278,37 +303,40 @@ def mrbles(
         - An `xarray.DataArray` or `xarray.Dataset` containing image data.
         - A sequence of file paths, `xarray.DataArray`, or `xarray.Dataset`.
     spectra :
-        A path to a csv file that contains the reference spectrum of each lanthanide that will be used for decoding.
+        A path to a CSV file that contains the reference spectrum of each lanthanide
+        used for decoding.
     codes :
-        A path to a csv file that contains the name and lanthanide content of each code.
+        A path to a CSV file that contains the name and lanthanide content of each code.
     flatfield :
         The flatfield correction factor or path to a flatfield correction image.
     darkfield :
         The darkfield correction factor or path to a darkfield correction image.
     overlap :
-        The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
+        The number of pixels to exclude from the edges of adjacent tiles during the
+        stitching process.
     min_bead_diameter, max_bead_diameter :
         The minimum/maximum diameter in pixels for detecting beads in the image.
     low_edge_quantile, high_edge_quantile :
-        The lower/upper quantile for edge detection, tunes the sensitivity of how dim edges can be when detecting beads. Must be between 0 and 1.
+        The lower/upper quantile for edge detection, tuning how dim edges can be when
+        detecting beads. Must be between 0 and 1.
     num_iter :
-        The maximum number of iterations to perform the bead detection process using RANSAC. A higher value will take longer but will find beads more accurately.
+        The maximum number of iterations to perform the bead detection process using
+        RANSAC. A higher value will take longer but will find beads more accurately.
     min_roundness :
-        The minimum roundness value for detected beads. Beads that do not meet this roundness threshold are excluded. Must be between 0 and 1.
+        The minimum roundness value for detected beads. Beads below this threshold are
+        excluded. Must be between 0 and 1.
     roi_length :
-        The length in pixels of the region of interest (ROI) around detected beadeads. If None, the ROI length is set to 2 * `max_bead_diameter`.
+        The length in pixels of the region of interest (ROI) around detected beads. If
+        None, the ROI length is set to 2 * `max_bead_diameter`.
     search_channel :
-        The channel or list of channels to use for bead detection. If `None`, all channels will be used.
-    roi_only :
-        If True, only returns the region of interest from the dataset.
-    drop_tiles :
-        If True, removes the "tile" variable from the dataset after stitching.
-    interactive:
-        If True, open a window to visualize and tune image processing step-by-step.
+        The channel or list of channels to use for bead detection. If `None`, all
+        channels will be used.
     reference :
-        The reference material or standard used for spectral decoding. The default is "eu" (Europium), which is typically used in MRBLEs for comparison in spectral analysis.
+        The reference material or standard used for spectral decoding. The default is
+        "eu" (Europium), which is typically used in MRBLEs for spectral comparison.
     roi_only :
-        If True, only returns the region of interest (ROI) from the dataset, ignoring other parts of the image.
+        If True, only returns the region of interest from the dataset, ignoring other
+        parts of the image.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
     interactive:
@@ -316,20 +344,28 @@ def mrbles(
 
     Returns
     -------
-    Processed image(s): xr.Dataset | list[xr.Dataset]
+    Processed image(s) : xr.Dataset | list[xr.Dataset]
         The processed images and ROI.
 
     Notes
     -----
-    This function uses a pipeline architecture to process MRBLEs image data. The steps in the pipeline include:
-    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
-    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
-    - 'flatfield_correct' : Applies flatfield and darkfield corrections to the image data.
+    This function uses a pipeline architecture to process MRBLEs image data. The steps
+    in the pipeline include:
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated
+      metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for
+      downstream processing.
+    - 'flatfield_correct' : Applies flatfield and darkfield corrections to the image
+      data.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
-    - 'find_beads' : Detects beads based on specified diameter, roundness, and other parameters.
-    - 'identify_mrbles' : Assign a code to each bead by matching their spectral signatures to the provided reference spectra.
-    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
-    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
+    - 'find_beads' : Detects beads based on specified diameter, roundness, and other
+      parameters.
+    - 'identify_mrbles' : Assign a code to each bead by matching spectral signatures to
+      the provided reference spectra.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only` and
+      `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was
+      read in as.
 
     Examples
     --------
@@ -337,7 +373,9 @@ def mrbles(
     ...     spectra=my_spectra, codes=my_codes, data=my_image_data, channels=[0], overlap=100
     ... )
 
-    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using channel 0 for analysis, and matching bead spectral signatures against `my_spectra` and `my_codes`.
+    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using
+    channel 0 for analysis, and matching bead spectral signatures against `my_spectra`
+    and `my_codes`.
     """
     pipe = mrbles_pipe(
         spectra=spectra,
@@ -381,11 +419,13 @@ def mrbles_pipe(
     interactive: bool = False,
 ) -> Pipeline:
     """
-    Build a Pipeline object that can detect MRBLEs(Microspheres with Ratiometric Barcode Lanthanide Encoding Beaads) in images and standardize the resulting data in an xarray.Dataset.
+    Build a Pipeline object that can detect MRBLEs (Microspheres with Ratiometric
+    Barcode Lanthanide Encoding Beads) in images and standardize the resulting data in
+    an xarray.Dataset.
 
     Reference
     -------
-    This function builds the necessary pipeline for detecting beads in mrbles images.
+    This function builds the necessary pipeline for detecting beads in MRBLE images.
     For detailed information on how to use this pipeline, refer to :func:`mrbles`.
     """
     pipe = Pipeline("read")
@@ -443,19 +483,25 @@ def beads(
     darkfield :
         The darkfield correction factor or path to a darkfield correction image.
     overlap :
-        The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
+        The number of pixels to exclude from the edges of adjacent tiles during the
+        stitching process.
     min_bead_diameter, max_bead_diameter :
         The minimum/maximum diameter in pixels for detecting beads in the image.
     low_edge_quantile, high_edge_quantile :
-        The lower/upper quantile for edge detection, tunes the sensitivity of how dim edges can be when detecting beads. Must be between 0 and 1.
+        The lower/upper quantile for edge detection, tuning how dim edges can be when
+        detecting beads. Must be between 0 and 1.
     num_iter :
-        The maximum number of iterations to perform the bead detection process using RANSAC. A higher value will take longer but will find beads more accurately.
+        The maximum number of iterations to perform the bead detection process using
+        RANSAC. A higher value will take longer but will find beads more accurately.
     min_roundness :
-        The minimum roundness value for detected beads. Beads that do not meet this roundness threshold are excluded. Must be between 0 and 1.
+        The minimum roundness value for detected beads. Beads that do not meet this
+        threshold are excluded. Must be between 0 and 1.
     roi_length :
-        The length in pixels of the region of interest (ROI) around detected beadeads. If None, the ROI length is set to 2 * `max_bead_diameter`.
+        The length in pixels of the region of interest (ROI) around detected beads. If
+        None, the ROI length is set to 2 * `max_bead_diameter`.
     search_channel :
-        The channel or list of channels to use for bead detection. If `None`, all channels will be used.
+        The channel or list of channels to use for bead detection. If `None`, all
+        channels will be used.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
@@ -465,20 +511,27 @@ def beads(
 
     Returns
     -------
-    Processed image(s): xr.Dataset | list[xr.Dataset]
+    Processed image(s) : xr.Dataset | list[xr.Dataset]
         The processed images and ROI.
 
     Notes
     -----
-    This function uses a pipeline architecture to process image data. The steps in the pipeline include:
+    This function uses a pipeline architecture to process image data. The steps in the
+    pipeline include:
 
-    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
-    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
-    - 'flatfield_correct' : Applies flatfield and darkfield corrections to the image data.
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated
+      metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for
+      downstream processing.
+    - 'flatfield_correct' : Applies flatfield and darkfield corrections to the image
+      data.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
-    - 'find_beads' : Detects beads based on specified diameter, roundness, and other parameters.
-    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
-    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
+    - 'find_beads' : Detects beads based on specified diameter, roundness, and other
+      parameters.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only` and
+      `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was
+      read in as.
 
     Examples
     --------
@@ -490,7 +543,8 @@ def beads(
     ...     max_bead_diameter=40,
     ... )
 
-    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using only channels 0 and 1, and detects beads with a diameter between 10 and 40 pixels.
+    This processes `my_image_data` by stitching tiles with 100 pixels of overlap, using
+    only channels 0 and 1, and detecting beads with a diameter between 10 and 40 pixels.
     """
     pipe = beads_pipe(
         flatfield=flatfield,
@@ -528,7 +582,8 @@ def beads_pipe(
     interactive: bool = False,
 ) -> Pipeline:
     """
-    Build a Pipeline object that can detect beads in images and standardize the resulting data in an xarray.Dataset.
+    Build a Pipeline object that can detect beads in images and standardize the
+    resulting data in an xarray.Dataset.
 
     Reference
     -------
@@ -575,25 +630,31 @@ def image(
         - An `xarray.DataArray` or `xarray.Dataset` containing image data.
         - A sequence of file paths, `xarray.DataArray`, or `xarray.Dataset`.
     overlap :
-        The number of pixels to exclude from the edges of adjacent tiles during the stitching process.
+        The number of pixels to exclude from the edges of adjacent tiles during the
+        stitching process.
     roi_only :
         If True, only returns the region of interest from the dataset.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
     Returns
     -------
-    Processed image(s) :
+    Processed image(s) : xr.Dataset | list[xr.Dataset]
         The processed images and ROI.
 
     Notes
     -----
-    This function uses a pipeline architecture to process image data. The steps in the pipeline include:
+    This function uses a pipeline architecture to process image data. The steps in the
+    pipeline include:
 
-    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated metadata.
-    - 'standardize_format' : Transforms the dataset into a consistent format for downstream processing.
+    - 'read' : Reads in an input set of zarr, tiff, ome-tiff, or xarray and associated
+      metadata.
+    - 'standardize_format' : Transforms the dataset into a consistent format for
+      downstream processing.
     - 'stitch' : Stitches image tiles based on the overlap parameter.
-    - 'drop' : Optionally removes elements in the dataset based on the `roi_only`, and `drop_tiles` options.
-    - 'restore_format' : Transforms the dataset back into the original format it was read in as.
+    - 'drop' : Optionally removes elements in the dataset based on the `roi_only` and
+      `drop_tiles` options.
+    - 'restore_format' : Transforms the dataset back into the original format it was
+      read in as.
 
     Examples
     --------
@@ -615,7 +676,8 @@ def image_pipe(
     drop_tiles: bool = True,
 ) -> Pipeline:
     """
-    Build a Pipeline object that reads in an image and standardizes the resulting data in an xarray.Dataset.
+    Build a Pipeline object that reads in an image and standardizes the resulting data
+    in an xarray.Dataset.
 
     Reference
     -------

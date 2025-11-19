@@ -42,7 +42,7 @@ class Reader:
 
             # None xp names should just mean a nameless experiment.
             path_dict = {("",) + k[1:] if k[0] is None else k: v for k, v in path_dict.items()}
-            xp_names = set(list(zip(*path_dict.keys()))[0])
+            xp_names = set(list(zip(*path_dict.keys(), strict=True))[0])
 
             for xp_name in sorted(xp_names, key=utils.natural_sort_key):
                 # Extract the paths for this experiment and turn all Nones into -1 so sorting works.
@@ -166,7 +166,9 @@ def read_tiffs(
     meta_dict,
 ) -> xr.Dataset:
     # Get the indices specified in the path each in sorted order.
-    channel_idxs, time_idxs, row_idxs, col_idxs = (sorted(set(idx)) for idx in zip(*xp_dict.keys()))
+    channel_idxs, time_idxs, row_idxs, col_idxs = (
+        sorted(set(idx)) for idx in zip(*xp_dict.keys(), strict=True)
+    )
 
     # Check which dimensions are specified in the path and compute the shape of those dimensions.
     dims_in_path = []
@@ -263,11 +265,8 @@ def read_tiffs(
     def read_tile(block_id, filenames):
         outer_id = block_id[: len(outer_shape)]
         inner_id = block_id[len(outer_shape) :]
-        if len(outer_id) > 0:
-            file_idx = np.ravel_multi_index(outer_id, outer_shape)
-        else:
-            # This is the case where we don't have indices outside the file.
-            file_idx = 0
+        # Account for the case where we don't have indices outside the file.
+        file_idx = np.ravel_multi_index(outer_id, outer_shape) if len(outer_id) > 0 else 0
 
         with tifffile.TiffFile(filenames[file_idx]) as tif:
             page_ndim = len(page_shape)

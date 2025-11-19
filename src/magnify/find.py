@@ -145,13 +145,12 @@ class ButtonFinder:
                 # Skip this timestep since we've already processed it.
                 continue
 
-            if t < self.search_timesteps[0]:
-                # Backfill timesteps that come before the first searched timestep.
-                copy_t = self.search_timesteps[0]
-            else:
-                # Re-use the button locations of the timestep just before this one since it's either
-                # a searched timestep or a timestep we just copied locations into.
-                copy_t = t - 1
+            # Either backfill timesteps that come before the first searched timestep or
+            # re-use the button locations of the timestep just before this one since it's either
+            # a searched timestep or a timestep we just copied locations into.
+            copy_t = self.search_timesteps[0] = (
+                self.search_timesteps[0] if t < self.search_timesteps[0] else t - 1
+            )
 
             # Preload all images for this timestep so we only read from disk once and
             # convert all relevant data to numpy arrays since iterating through xarrays is slow.
@@ -183,7 +182,8 @@ class ButtonFinder:
             assay["fg"] = assay.fg.persist()
             assay["bg"] = assay.bg.persist()
         assay = assay.stack(mark=("mark_row", "mark_col"), create_index=True).transpose("mark", ...)
-        # Rechunk the array to chunk along markers since users will usually want to slice along that dimension.
+        # Rechunk the array to chunk along markers since users will usually want
+        # to slice along that dimension.
         mark_chunk_size = min(
             math.ceil(chunk_bytes / (roi_bytes * assay.sizes["time"] * assay.sizes["channel"])),
             num_rows,
@@ -739,7 +739,7 @@ def regress_clusters(
     )
     # Re-estimate intercepts using a weighted mean of global and local estimates.
     # This reduces outlier effects while still allowing uneven intercepts from image stitching.
-    for i, (x, y) in enumerate(cluster_points):
+    for i, (x, _y) in enumerate(cluster_points):
         if ideal_num_points[i] != 0 and not_nan[i]:
             weight = min(len(x), ideal_num_points[i]) / ideal_num_points[i]
             intercepts[i] = weight * intercepts[i] + (1 - weight) * (intercept_m * i + intercept_b)

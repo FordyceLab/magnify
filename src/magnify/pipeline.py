@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 import xarray as xr
 from numpy.typing import ArrayLike
@@ -55,7 +55,7 @@ class Pipeline:
             raise ValueError("Only one of after, before, first, and last can be set.")
 
         # Check that the new component's name is unique
-        if self.components and name in next(zip(*self.components)):
+        if self.components and name in next(zip(*self.components, strict=True)):
             raise ValueError(f"A component with the name '{name}' already exists in the pipeline.")
 
         # Find where to insert the component.
@@ -80,7 +80,7 @@ class Pipeline:
     def remove_pipe(self, name: str) -> None:
         if not self.components:
             raise ValueError(f"Cannot remove pipe '{name}': pipeline has no components")
-        component_names = list(zip(*self.components))[0]
+        component_names = list(zip(*self.components, strict=True))[0]
         if name not in component_names:
             raise ValueError(f"Component '{name}' not found in pipeline")
         idx = component_names.index(name)

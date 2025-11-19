@@ -15,7 +15,8 @@ class Stitcher:
 
         if self.overlap >= assay.sizes["tile_y"] or self.overlap >= assay.sizes["tile_x"]:
             raise ValueError(
-                f"Overlap ({self.overlap}) must be smaller than tile size ({assay.sizes['tile_y']}x{assay.sizes['tile_x']})."
+                f"Overlap ({self.overlap}) must be smaller than tile size "
+                + f"({assay.sizes['tile_y']}x{assay.sizes['tile_x']})."
             )
 
         # Take half of overlap from each edge.

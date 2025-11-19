@@ -173,7 +173,8 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
         if proportions[i] > 1:
             covs[i] += np.cov(X_r[tag_idxs == i], rowvar=False)
 
-    # Set all component variances to be the same since initializing individual covariances can lead to huge terms.
+    # Set all component variances to be identical since initializing individual
+    # covariances can lead to huge terms.
     covs[:] = np.median(covs, axis=0)
     # Initialize the uniform component.
     proportions[-1] = 1e-10
@@ -184,7 +185,7 @@ def identify_mrbles(assay, spectra, codes, reference="eu"):
 
     tag_names = np.append(tag_names, "outlier")
     # Run the Expectation-Maximization algorithm.
-    for i in range(50):
+    for _ in range(50):
         # E-step: Compute the probability of each point belonging to each component.
         diff = X[:, np.newaxis, :] - means[np.newaxis, :, :]
         # Work in log space most of the time to avoid numerical issues.

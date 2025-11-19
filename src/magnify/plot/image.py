@@ -17,7 +17,7 @@ def roishow(xp: xr.Dataset):
     roi = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0).shape)
     fg = np.zeros((counts.max(), len(tags)) + xp.roi.isel(mark=0, channel=0).shape, dtype=bool)
     bg = np.zeros_like(fg)
-    for i, (tag, group) in enumerate(xp.roi.groupby("tag")):
+    for i, (_tag, group) in enumerate(xp.roi.groupby("tag")):
         roi[: group.sizes["mark"], i] = group
         fg[: group.sizes["mark"], i] = group.fg.isel(channel=0)
         bg[: group.sizes["mark"], i] = group.bg.isel(channel=0)
