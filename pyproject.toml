@@ -1,49 +1,49 @@
 [project]
 name = "magnify"
-version = "0.12.4"
+version = "0.12.5"
 description = "A microscopy image processing toolkit."
 authors = [
-    {name = "Karl Krauth", email = "karl.krauth@gmail.com"},
-    {name = "Xinxian Tian", email = "cicitian887@gmail.com"}
+  { name = "Karl Krauth", email = "karl.krauth@gmail.com" },
+  { name = "Xinxian Tian", email = "cicitian887@gmail.com" },
 ]
 readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
-    "beautifulsoup4>=4.10.0",
-    "catalogue>=2.0.8",
-    "confection>=0.0.4",
-    "dask[complete]>=2025.02.0",
-    "dask_image>=2024.5.3",
-    "opencv-python-headless>=4.0",
-    "lxml>=5.0.0",
-    "matplotlib>=3.9.0",
-    "napari>=0.5.0",
-    "numba>=0.58.1",
-    "numpy>=1.22.0",
-    "pyqt6>=6.10.0",
-    "scipy>=1.9.0",
-    "pandas>=2.3.3",
-    "plotly>=5.18.0",
-    "tifffile>=2021.11.2",
-    "scikit-learn>=1.2.0",
-    "tqdm>=4.64",
-    "types-tqdm>=4.64",
-    "xarray[io]>=2025.10.0",
-    "zarr >= 3.0.0",
+  "beautifulsoup4>=4.10.0",
+  "catalogue>=2.0.8",
+  "confection>=0.0.4",
+  "dask[complete]>=2025.02.0",
+  "dask_image>=2024.5.3",
+  "opencv-python-headless>=4.0",
+  "lxml>=5.0.0",
+  "matplotlib>=3.9.0",
+  "napari>=0.5.0",
+  "numba>=0.58.1",
+  "numpy>=1.22.0",
+  "pyqt6>=6.10.0",
+  "scipy>=1.9.0",
+  "pandas>=2.3.3",
+  "plotly>=5.18.0",
+  "tifffile>=2021.11.2",
+  "scikit-learn>=1.2.0",
+  "tqdm>=4.64",
+  "types-tqdm>=4.64",
+  "xarray[io]>=2025.10.0",
+  "zarr >= 3.0.0",
 ]
 
 [dependency-groups]
 dev = [
-    "ipython>=9.6.0",
-    "jupyter>=1.1.1",
-    "jupyterlab>=4.0.0",
-    "mkdocs-material>=9.7.0",
-    "mkdocstrings[python]>=0.30.1",
-    "mypy>=1.0.1",
-    "pre-commit>=4.0.0",
-    "pytest>=7.1.2",
-    "ruff>=0.0.249",
+  "ipython>=9.6.0",
+  "jupyter>=1.1.1",
+  "jupyterlab>=4.0.0",
+  "mkdocs-material>=9.7.0",
+  "mkdocstrings[python]>=0.30.1",
+  "mypy>=1.0.1",
+  "pre-commit>=4.0.0",
+  "pytest>=7.1.2",
+  "ruff>=0.0.249",
 ]
 
 [build-system]
@@ -56,19 +56,19 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = [
-    # pycodestyle
-    "E",
-    "W",
-    # Pyflakes
-    "F",
-    # pyupgrade
-    "UP",
-    # flake8-bugbear
-    "B",
-    # flake8-simplify
-    "SIM",
-    # isort
-    "I",
+  # pycodestyle
+  "E",
+  "W",
+  # Pyflakes
+  "F",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # flake8-simplify
+  "SIM",
+  # isort
+  "I",
 ]
 
 [tool.ruff.format]
