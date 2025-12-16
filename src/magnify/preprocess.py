@@ -2,7 +2,6 @@ import os
 import pathlib
 
 import dask.array as da
-import dask_image.ndinterp
 import tifffile
 import xarray as xr
 
@@ -54,9 +53,9 @@ def rename_labels(xp: xr.Dataset, **coords):
 
 @registry.component("rotate")
 def rotate(xp: xr.Dataset, rotation=0):
-    xp["image"].data = dask_image.ndinterp.rotate(
-        xp.image.data, rotation, axes=(-1, -2), reshape=False
-    )
+    # xp["image"].data = dask_image.ndinterp.rotate(
+    #     xp.image.data, rotation, axes=(-1, -2), reshape=False
+    # )
     return xp
 
 
