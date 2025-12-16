@@ -58,10 +58,10 @@ class Reader:
                     if (path / ".zattrs").is_file():
                         # The file was written with a recent prismo version.
                         # The last element in the path is the group directory.
-                        xp = xr.open_zarr(path.parent, group=path.name)
+                        xp = xr.open_zarr(path.parent, group=path.name, consolidated=False)
                     else:
                         # The file was writen with prismo version 0.0.1 with no groups.
-                        xp = xr.open_zarr(path)
+                        xp = xr.open_zarr(path, consolidated=False)
                     xp.attrs["name"] = xp_name
                 else:
                     xp = read_tiffs(
