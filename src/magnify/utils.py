@@ -111,7 +111,6 @@ def find_circles(
     min_dist: int,
     gui: InteractiveUI | None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    # TODO: Make this functions nicer.
     # Step 1: Denoise the image for more accurate edge finding.
     img = cv.GaussianBlur(img, (5, 5), 0)
 
@@ -168,10 +167,10 @@ def find_circles(
 
         # Step 5: Filter circles with low number of edges on their circumference
         # or whose gradients don't point toward the center.
-        thetas = np.arctan2(dy, dx)
+        grad_angles = np.arctan2(dy, dx)
         # Pad the gradient angles and edges to avoid boundary cases.
         pad = 2 * max_radius
-        thetas = np.pad(thetas, pad)
+        grad_angles = np.pad(grad_angles, pad)
         padded_edges = np.pad(edges, pad)
         # Adjust circle coordinates to account for padding.
         circles[:, :2] += pad
@@ -184,7 +183,7 @@ def find_circles(
         for radius in range(min_radius, max_radius + 1):
             perimeter_coords = circle_points(radius)
             end = np.searchsorted(circles[:, 2], radius + 1)
-            s = mean_grad(thetas, padded_edges, circles[start:end, :2], perimeter_coords)
+            s = mean_grad(grad_angles, padded_edges, circles[start:end, :2], perimeter_coords)
             scores.append(s / len(perimeter_coords))
             start = end
         circles[:, :2] -= pad
@@ -224,52 +223,71 @@ def find_circles(
 
 
 @numba.njit(parallel=True)
-def mean_grad(thetas, edges, circles, perimeter_coords):
-    # TODO: Make this function nicer.
-    means = np.empty(len(circles), dtype=np.float32)
-    c = np.arctan2(perimeter_coords[:, 0], perimeter_coords[:, 1])
-    for i in prange(len(circles)):
-        row = perimeter_coords[:, 0] + circles[i, 0]
-        col = perimeter_coords[:, 1] + circles[i, 1]
-        m = 0
-        for j in prange(len(row)):
-            t = thetas[row[j], col[j]]
-            e = edges[row[j], col[j]]
-            if e > 0:
-                d = np.abs(t - c[j])
-                if d > np.pi:
-                    d = d - np.pi
-                m += 4 * np.abs(d - np.pi / 2) / np.pi - 1
-        means[i] = m
+def mean_grad(grad_angles, edges, circles, perimeter_coords):
+    """Score circles by how well edge gradients point toward circle centers.
 
-    return means
+    For a true circle, gradients at edge pixels should point radially inward/outward.
+    Returns a score for each circle: higher means gradients align better with radial direction.
+    """
+    scores = np.empty(len(circles), dtype=np.float32)
+    # Expected angle pointing toward center for each perimeter offset.
+    expected_angles = np.arctan2(perimeter_coords[:, 0], perimeter_coords[:, 1])
+
+    for i in prange(len(circles)):
+        perimeter_row = perimeter_coords[:, 0] + circles[i, 0]
+        perimeter_col = perimeter_coords[:, 1] + circles[i, 1]
+        alignment_sum = 0
+        for j in prange(len(perimeter_row)):
+            actual_angle = grad_angles[perimeter_row[j], perimeter_col[j]]
+            is_edge = edges[perimeter_row[j], perimeter_col[j]]
+            if is_edge > 0:
+                angle_diff = np.abs(actual_angle - expected_angles[j])
+                if angle_diff > np.pi:
+                    angle_diff = angle_diff - np.pi
+                # Score: +1 when gradient is perpendicular to perimeter (radial), -1 when tangent.
+                alignment_sum += 4 * np.abs(angle_diff - np.pi / 2) / np.pi - 1
+        scores[i] = alignment_sum
+
+    return scores
 
 
 @numba.njit  # (parallel=True)
 def filter_neighbors(circles, min_dist):
-    # TODO: Make this function nicer.
+    """Filter out circles that overlap with higher-scoring circles.
+
+    Uses a spatial grid to efficiently check for nearby circles. Each circle claims
+    a disk of radius min_dist; subsequent circles overlapping claimed regions are rejected.
+    Assumes circles are pre-sorted by score (best first).
+    """
     if len(circles) == 0:
         return np.ones(0, dtype=np.bool_)
 
-    coords = circle_points(min_dist, four_connected=True)
+    exclusion_disk = circle_points(min_dist, four_connected=True)
 
     pad = 2 * min_dist + 1
-    arr = -np.ones((circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32)
+    claimed = -np.ones(
+        (circles[:, 0].max() + 2 * pad, circles[:, 1].max() + 2 * pad), dtype=np.int32
+    )
     valid = np.ones(len(circles), dtype=np.bool_)
+
     for i in range(len(circles)):
-        for j in range(len(coords)):
-            row = coords[j, 0] + circles[i, 0] + pad
-            col = coords[j, 1] + circles[i, 1] + pad
-            v = arr[row, col]
-            if v != -1:
+        # Check if this circle overlaps any already-claimed region.
+        for j in range(len(exclusion_disk)):
+            check_row = exclusion_disk[j, 0] + circles[i, 0] + pad
+            check_col = exclusion_disk[j, 1] + circles[i, 1] + pad
+            owner_idx = claimed[check_row, check_col]
+            if owner_idx != -1:
                 valid[i] = False
                 break
+
         if not valid[i]:
             continue
-        for j in range(len(coords)):
-            row = coords[j, 0] + circles[i, 0] + pad
-            col = coords[j, 1] + circles[i, 1] + pad
-            arr[row, col] = i
+
+        # Claim this circle's exclusion zone.
+        for j in range(len(exclusion_disk)):
+            claim_row = exclusion_disk[j, 0] + circles[i, 0] + pad
+            claim_col = exclusion_disk[j, 1] + circles[i, 1] + pad
+            claimed[claim_row, claim_col] = i
 
     return valid
 

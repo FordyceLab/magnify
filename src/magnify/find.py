@@ -148,9 +148,7 @@ class ButtonFinder:
             # Either backfill timesteps that come before the first searched timestep or
             # re-use the button locations of the timestep just before this one since it's either
             # a searched timestep or a timestep we just copied locations into.
-            copy_t = self.search_timesteps[0] = (
-                self.search_timesteps[0] if t < self.search_timesteps[0] else t - 1
-            )
+            copy_t = self.search_timesteps[0] if t < self.search_timesteps[0] else t - 1
 
             # Preload all images for this timestep so we only read from disk once and
             # convert all relevant data to numpy arrays since iterating through xarrays is slow.
