@@ -272,3 +272,159 @@ def test_beads_output_structure(bead_single):
     assert "mark" in xp.dims
     assert "roi_x" in xp.dims
     assert "roi_y" in xp.dims
+
+
+# =============================================================================
+# Tests - Multi-channel
+# =============================================================================
+
+
+def test_beads_multichannel_search_single():
+    """Test finding beads on a single channel in multi-channel input."""
+    # Create beads at same positions in both channels.
+    positions = [[300, 300], [700, 700]]
+    ch1 = draw_beads((1024, 1024), positions)
+    ch2 = draw_beads((1024, 1024), positions)
+
+    data = xr.DataArray(
+        data=np.stack([ch1, ch2]),
+        dims=("channel", "y", "x"),
+        coords={"channel": ["red", "green"]},
+    )
+
+    # Search only on "red" channel.
+    xp = mg.beads(
+        data=data,
+        min_bead_diameter=16,
+        max_bead_diameter=24,
+        overlap=0,
+        num_iter=5000,
+        search_channel="red",
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert xp.roi.sizes["mark"] == 2
+    assert "red" in xp.channel.values
+    assert "green" in xp.channel.values
+
+    # Verify positions are near expected locations.
+    detected_positions = set()
+    for i in range(2):
+        y = xp.y[i].values.item()
+        x = xp.x[i].values.item()
+        detected_positions.add((round(y / 100) * 100, round(x / 100) * 100))
+    assert (300, 300) in detected_positions
+    assert (700, 700) in detected_positions
+
+    # Verify bead sizes are reasonable (radius ~10).
+    radius = 10
+    areas = xp.fg.sum(dim=["roi_x", "roi_y"]).values
+    for area in areas:
+        detected_radius = np.sqrt(area / np.pi)
+        assert 0.8 * radius < detected_radius < 1.2 * radius
+
+
+def test_beads_multichannel_different_beads():
+    """Test finding beads that appear in different channels."""
+    # Beads in channel 1 only.
+    ch1_positions = [[200, 200], [200, 800]]
+    # Beads in channel 2 only.
+    ch2_positions = [[800, 200], [800, 800]]
+
+    ch1 = draw_beads((1024, 1024), ch1_positions)
+    ch2 = draw_beads((1024, 1024), ch2_positions)
+
+    data = xr.DataArray(
+        data=np.stack([ch1, ch2]),
+        dims=("channel", "y", "x"),
+        coords={"channel": ["red", "green"]},
+    )
+
+    # Search on both channels - should find all 4 beads.
+    xp = mg.beads(
+        data=data,
+        min_bead_diameter=16,
+        max_bead_diameter=24,
+        overlap=0,
+        num_iter=10000,
+        search_channel=["red", "green"],
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert xp.roi.sizes["mark"] == 4
+
+    # Verify all four positions are found.
+    detected_positions = set()
+    for i in range(4):
+        y = xp.y[i].values.item()
+        x = xp.x[i].values.item()
+        detected_positions.add((round(y / 100) * 100, round(x / 100) * 100))
+    assert (200, 200) in detected_positions
+    assert (200, 800) in detected_positions
+    assert (800, 200) in detected_positions
+    assert (800, 800) in detected_positions
+
+
+def test_beads_multichannel_subset_only():
+    """Test that beads only in non-searched channels are not found."""
+    # Beads only in green channel.
+    ch1 = np.zeros((1024, 1024), dtype=np.uint16)  # Empty red channel
+    ch2 = draw_beads((1024, 1024), [[512, 512]])  # Bead in green channel
+
+    data = xr.DataArray(
+        data=np.stack([ch1, ch2]),
+        dims=("channel", "y", "x"),
+        coords={"channel": ["red", "green"]},
+    )
+
+    # Search only on red channel - should find no beads.
+    xp = mg.beads(
+        data=data,
+        min_bead_diameter=16,
+        max_bead_diameter=24,
+        overlap=0,
+        num_iter=1000,
+        search_channel="red",
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert xp.roi.sizes["mark"] == 0
+
+
+def test_beads_multichannel_overlapping():
+    """Test beads that appear in multiple channels at same location."""
+    # Same bead visible in both channels.
+    positions = [[512, 512]]
+    ch1 = draw_beads((1024, 1024), positions, value=1000)
+    ch2 = draw_beads((1024, 1024), positions, value=2000)
+
+    data = xr.DataArray(
+        data=np.stack([ch1, ch2]),
+        dims=("channel", "y", "x"),
+        coords={"channel": ["red", "green"]},
+    )
+
+    # Search on both channels - should find only 1 bead (not duplicated).
+    xp = mg.beads(
+        data=data,
+        min_bead_diameter=16,
+        max_bead_diameter=24,
+        overlap=0,
+        num_iter=5000,
+        search_channel=["red", "green"],
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert xp.roi.sizes["mark"] == 1
+
+    # Verify position is near expected location.
+    y = xp.y[0].values.item()
+    x = xp.x[0].values.item()
+    assert 480 < y < 544
+    assert 480 < x < 544
+
+    # Verify bead size.
+    radius = 10
+    area = xp.fg.sum(dim=["roi_x", "roi_y"]).values.item()
+    detected_radius = np.sqrt(area / np.pi)
+    assert 0.8 * radius < detected_radius < 1.2 * radius

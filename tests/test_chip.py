@@ -367,3 +367,372 @@ def test_chip_unstacked_structure(chip_2x2):
 
     assert "mark_row" in xp.dims
     assert "mark_col" in xp.dims
+
+
+# =============================================================================
+# Tests - Multi-timestep
+# =============================================================================
+
+
+def test_chip_multiple_timesteps():
+    """Test chip detection with multiple timesteps."""
+    chip_img = draw_chip((3, 3), 20)
+    # Stack same image for 3 timesteps.
+    data = xr.DataArray(
+        data=np.stack([chip_img, chip_img, chip_img]),
+        dims=("time", "y", "x"),
+        coords={"time": [0, 1, 2]},
+    )
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(3, 3),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    # Should have time dimension in output.
+    assert xp.sizes["time"] == 3
+    # Positions should be consistent across timesteps.
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    # Check positions for all buttons across all timesteps.
+    for t in range(3):
+        for row in range(3):
+            for col in range(3):
+                expected_x = (col + 1) * 100
+                expected_y = (row + 1) * 100
+                actual_x = xp.x[row, col, t].values.item()
+                actual_y = xp.y[row, col, t].values.item()
+                assert 0.9 * expected_x < actual_x < 1.1 * expected_x
+                assert 0.9 * expected_y < actual_y < 1.1 * expected_y
+
+    # Verify button sizes are consistent.
+    radius = 10
+    areas = xp.fg.sum(dim=["roi_x", "roi_y"]).values
+    for area in areas.flatten():
+        detected_radius = np.sqrt(area / np.pi)
+        assert 0.8 * radius < detected_radius < 1.2 * radius
+
+
+def test_chip_timestep_refinding():
+    """Test that search_timestep controls which timesteps are actively searched."""
+    chip_img = draw_chip((3, 3), 20)
+    # Stack same image for 4 timesteps.
+    data = xr.DataArray(
+        data=np.stack([chip_img] * 4),
+        dims=("time", "y", "x"),
+        coords={"time": [0, 1, 2, 3]},
+    )
+
+    # Only search on timestep 0, others should copy from it.
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(3, 3),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_timestep=0,
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    # All timesteps should have the same button positions (copied from t=0).
+    x_t0 = xp.x[:, :, 0].values
+    y_t0 = xp.y[:, :, 0].values
+    for t in range(1, 4):
+        x_t = xp.x[:, :, t].values
+        y_t = xp.y[:, :, t].values
+        np.testing.assert_array_almost_equal(x_t0, x_t)
+        np.testing.assert_array_almost_equal(y_t0, y_t)
+
+    # Verify t=0 positions are correct.
+    for row in range(3):
+        for col in range(3):
+            expected_x = (col + 1) * 100
+            expected_y = (row + 1) * 100
+            assert 0.9 * expected_x < x_t0[row, col] < 1.1 * expected_x
+            assert 0.9 * expected_y < y_t0[row, col] < 1.1 * expected_y
+
+
+def test_chip_multiple_search_timesteps():
+    """Test searching on multiple specific timesteps."""
+    chip_img = draw_chip((3, 3), 20)
+    data = xr.DataArray(
+        data=np.stack([chip_img] * 5),
+        dims=("time", "y", "x"),
+        coords={"time": [0, 1, 2, 3, 4]},
+    )
+
+    # Search on timesteps 0 and 2.
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(3, 3),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_timestep=[0, 2],
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert xp.sizes["time"] == 5
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    # Verify positions at searched timesteps.
+    for t in [0, 2]:
+        for row in range(3):
+            for col in range(3):
+                expected_x = (col + 1) * 100
+                actual_x = xp.x[row, col, t].values.item()
+                assert 0.9 * expected_x < actual_x < 1.1 * expected_x
+
+
+def test_chip_refinding_with_shifted_buttons():
+    """Test that refinding adapts to button positions that shift between timesteps."""
+    # Create two chip images with buttons at different positions.
+    # t=0: buttons at normal positions
+    # t=1: buttons shifted by 10 pixels in x and y
+    chip_t0 = draw_chip((2, 2), 20, row_dist=100, col_dist=100)
+
+    # For t=1, create a shifted version by padding/cropping.
+    shift_y, shift_x = 10, 10
+    chip_t1 = np.zeros_like(chip_t0)
+    chip_t1[shift_y:, shift_x:] = chip_t0[:-shift_y, :-shift_x]
+
+    data = xr.DataArray(
+        data=np.stack([chip_t0, chip_t1]),
+        dims=("time", "y", "x"),
+        coords={"time": [0, 1]},
+    )
+
+    # Search on BOTH timesteps - should find different positions.
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(2, 2),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_timestep=[0, 1],
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    # t=0 should have buttons at normal positions.
+    for row in range(2):
+        for col in range(2):
+            expected_x = (col + 1) * 100
+            expected_y = (row + 1) * 100
+            actual_x_t0 = xp.x[row, col, 0].values.item()
+            actual_y_t0 = xp.y[row, col, 0].values.item()
+            assert 0.9 * expected_x < actual_x_t0 < 1.1 * expected_x
+            assert 0.9 * expected_y < actual_y_t0 < 1.1 * expected_y
+
+    # t=1 should have buttons shifted by ~10 pixels.
+    for row in range(2):
+        for col in range(2):
+            expected_x = (col + 1) * 100 + shift_x
+            expected_y = (row + 1) * 100 + shift_y
+            actual_x_t1 = xp.x[row, col, 1].values.item()
+            actual_y_t1 = xp.y[row, col, 1].values.item()
+            assert 0.85 * expected_x < actual_x_t1 < 1.15 * expected_x
+            assert 0.85 * expected_y < actual_y_t1 < 1.15 * expected_y
+
+    # Verify that t=0 and t=1 positions are different.
+    x_diff = np.abs(xp.x[:, :, 1].values - xp.x[:, :, 0].values)
+    y_diff = np.abs(xp.y[:, :, 1].values - xp.y[:, :, 0].values)
+    assert np.mean(x_diff) > 5  # Should differ by roughly the shift amount
+    assert np.mean(y_diff) > 5
+
+
+def test_chip_no_refinding_copies_from_searched():
+    """Test that non-searched timesteps copy positions from searched ones, even if buttons moved."""
+    # Create two chip images with buttons at different positions.
+    chip_t0 = draw_chip((2, 2), 20, row_dist=100, col_dist=100)
+
+    # t=1 has buttons shifted, but we won't search on it.
+    shift_y, shift_x = 15, 15
+    chip_t1 = np.zeros_like(chip_t0)
+    chip_t1[shift_y:, shift_x:] = chip_t0[:-shift_y, :-shift_x]
+
+    data = xr.DataArray(
+        data=np.stack([chip_t0, chip_t1]),
+        dims=("time", "y", "x"),
+        coords={"time": [0, 1]},
+    )
+
+    # Only search on t=0 - t=1 should copy positions from t=0.
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(2, 2),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_timestep=0,
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    # Both timesteps should have the SAME positions (copied from t=0).
+    x_t0 = xp.x[:, :, 0].values
+    x_t1 = xp.x[:, :, 1].values
+    y_t0 = xp.y[:, :, 0].values
+    y_t1 = xp.y[:, :, 1].values
+
+    np.testing.assert_array_almost_equal(x_t0, x_t1)
+    np.testing.assert_array_almost_equal(y_t0, y_t1)
+
+    # And those positions should be the original (unshifted) positions.
+    for row in range(2):
+        for col in range(2):
+            expected_x = (col + 1) * 100
+            expected_y = (row + 1) * 100
+            assert 0.9 * expected_x < x_t0[row, col] < 1.1 * expected_x
+            assert 0.9 * expected_y < y_t0[row, col] < 1.1 * expected_y
+
+
+# =============================================================================
+# Tests - Multi-channel
+# =============================================================================
+
+
+def test_chip_multichannel():
+    """Test chip detection with multiple channels."""
+    chip_img = draw_chip((3, 3), 20)
+    # Same chip in both channels.
+    data = xr.DataArray(
+        data=np.stack([chip_img, chip_img]),
+        dims=("channel", "y", "x"),
+        coords={"channel": ["bf", "gfp"]},
+    )
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(3, 3),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_channel="bf",
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert "bf" in xp.channel.values
+    assert "gfp" in xp.channel.values
+
+    # Verify positions.
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+    for row in range(3):
+        for col in range(3):
+            expected_x = (col + 1) * 100
+            expected_y = (row + 1) * 100
+            actual_x = xp.x[row, col].values.item()
+            actual_y = xp.y[row, col].values.item()
+            assert 0.9 * expected_x < actual_x < 1.1 * expected_x
+            assert 0.9 * expected_y < actual_y < 1.1 * expected_y
+
+
+def test_chip_multichannel_search_specific():
+    """Test searching on a specific channel in multi-channel input."""
+    # Buttons visible in bf, not in gfp.
+    chip_img = draw_chip((3, 3), 20)
+    empty_img = np.zeros_like(chip_img)
+
+    data = xr.DataArray(
+        data=np.stack([chip_img, empty_img]),
+        dims=("channel", "y", "x"),
+        coords={"channel": ["bf", "gfp"]},
+    )
+
+    # Search on bf channel where buttons are visible.
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(3, 3),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_channel="bf",
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    # Should find buttons based on bf channel at correct positions.
+    for row in range(3):
+        for col in range(3):
+            expected_x = (col + 1) * 100
+            expected_y = (row + 1) * 100
+            actual_x = xp.x[row, col].values.item()
+            actual_y = xp.y[row, col].values.item()
+            assert 0.9 * expected_x < actual_x < 1.1 * expected_x
+            assert 0.9 * expected_y < actual_y < 1.1 * expected_y
+
+    # Verify button sizes.
+    radius = 10
+    areas = xp.fg.sum(dim=["roi_x", "roi_y"]).values
+    for area in areas.flatten():
+        detected_radius = np.sqrt(area / np.pi)
+        assert 0.8 * radius < detected_radius < 1.2 * radius
+
+
+def test_chip_multichannel_multitimestep():
+    """Test chip detection with both multiple channels and timesteps."""
+    chip_img = draw_chip((2, 2), 20)
+    # 2 channels x 3 timesteps.
+    data = xr.DataArray(
+        data=np.stack([[chip_img] * 3, [chip_img] * 3]),
+        dims=("channel", "time", "y", "x"),
+        coords={"channel": ["bf", "gfp"], "time": [0, 1, 2]},
+    )
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(2, 2),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+        search_channel="bf",
+    )
+
+    assert isinstance(xp, xr.Dataset)
+    assert xp.sizes["time"] == 3
+    assert xp.sizes["channel"] == 2
+
+    # Verify positions across all timesteps.
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+    for t in range(3):
+        for row in range(2):
+            for col in range(2):
+                expected_x = (col + 1) * 100
+                expected_y = (row + 1) * 100
+                actual_x = xp.x[row, col, t].values.item()
+                actual_y = xp.y[row, col, t].values.item()
+                assert 0.9 * expected_x < actual_x < 1.1 * expected_x
+                assert 0.9 * expected_y < actual_y < 1.1 * expected_y
