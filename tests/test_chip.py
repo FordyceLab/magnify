@@ -6,13 +6,29 @@ import magnify as mg
 from magnify.utils import filled_circle_points
 
 
-def draw_chip(shape, button_diameter=20, row_dist=100, col_dist=100, value=1000):
+def draw_chip(shape, button_diameter=20, row_dist=100, col_dist=100, value=1000, blanks=None):
+    """Draw a microfluidic chip with buttons arranged in a grid.
+
+    Args:
+        shape: (num_rows, num_cols) of button grid.
+        button_diameter: Diameter of each button in pixels.
+        row_dist: Distance between button rows in pixels.
+        col_dist: Distance between button columns in pixels.
+        value: Intensity value for buttons.
+        blanks: List of (row, col) tuples for blank positions (no button drawn).
+    """
     button_radius = button_diameter // 2
     chip = np.zeros(((shape[0] + 1) * row_dist, (shape[1] + 1) * col_dist), dtype=np.uint16)
     circle = filled_circle_points(button_radius)
+
+    blanks = blanks or []
+    blank_set = set(blanks)
+
     for i in range(shape[0]):
         row_pos = (i + 1) * row_dist
         for j in range(shape[1]):
+            if (i, j) in blank_set:
+                continue
             col_pos = (j + 1) * col_dist
             chip[circle[:, 0] + row_pos, circle[:, 1] + col_pos] = value
     return chip
@@ -20,29 +36,35 @@ def draw_chip(shape, button_diameter=20, row_dist=100, col_dist=100, value=1000)
 
 @pytest.fixture
 def chip_1x1():
+    """Minimal 1x1 chip. Used by multiple tests."""
     return xr.DataArray(data=draw_chip((1, 1), 20), dims=("y", "x"))
 
 
 @pytest.fixture
-def chip_10x10():
-    return xr.DataArray(data=draw_chip((10, 10), 20), dims=("y", "x"))
+def chip_2x2():
+    """Small 2x2 chip. Used by multiple tests."""
+    return xr.DataArray(data=draw_chip((2, 2), 20), dims=("y", "x"))
+
+
+# =============================================================================
+# Tests - Basic Functionality
+# =============================================================================
 
 
 def test_one_by_one_chip(chip_1x1):
-    xp = (
-        mg.microfluidic_chip(
-            data=chip_1x1,
-            shape=(1, 1),
-            min_button_diameter=16,
-            max_button_diameter=32,
-            overlap=0,
-            row_dist=100,
-            col_dist=100,
-            num_iter=100,
-        )
-        .unstack()
-        .transpose("mark_row", "mark_col", ...)
+    """Test minimal 1x1 chip detection."""
+    xp = mg.microfluidic_chip(
+        data=chip_1x1,
+        shape=(1, 1),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=100,
     )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
 
     assert xp.roi.sizes["mark_row"] == 1
     assert xp.roi.sizes["mark_col"] == 1
@@ -52,21 +74,20 @@ def test_one_by_one_chip(chip_1x1):
 
 
 def test_float_chip(chip_1x1):
+    """Test that float input is handled correctly."""
     float_chip = chip_1x1.astype(np.float32)
-    xp = (
-        mg.microfluidic_chip(
-            data=float_chip,
-            shape=(1, 1),
-            min_button_diameter=16,
-            max_button_diameter=32,
-            overlap=0,
-            row_dist=100,
-            col_dist=100,
-            num_iter=100,
-        )
-        .unstack()
-        .transpose("mark_row", "mark_col", ...)
+    xp = mg.microfluidic_chip(
+        data=float_chip,
+        shape=(1, 1),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=100,
     )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
 
     assert xp.roi.sizes["mark_row"] == 1
     assert xp.roi.sizes["mark_col"] == 1
@@ -75,21 +96,22 @@ def test_float_chip(chip_1x1):
     assert 0.95 * 100 < xp.x.squeeze().values.item() < 1.05 * 100
 
 
-def test_ten_by_ten_chip(chip_10x10):
-    xp = (
-        mg.microfluidic_chip(
-            data=chip_10x10,
-            shape=(10, 10),
-            min_button_diameter=16,
-            max_button_diameter=32,
-            overlap=0,
-            row_dist=100,
-            col_dist=100,
-            num_iter=10000,
-        )
-        .unstack()
-        .transpose("mark_row", "mark_col", ...)
+def test_ten_by_ten_chip():
+    """Test standard 10x10 chip detection."""
+    data = xr.DataArray(data=draw_chip((10, 10), 20), dims=("y", "x"))
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(10, 10),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=10000,
     )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
 
     assert xp.roi.sizes["mark_row"] == 10
     assert xp.roi.sizes["mark_col"] == 10
@@ -100,5 +122,248 @@ def test_ten_by_ten_chip(chip_10x10):
     assert 0.95 * 100 < xp.x[0, 0].values.item() < 1.05 * 100
     assert 0.95 * 100 < xp.y[0, 0].values.item() < 1.05 * 100
 
+    # Check specific positions in grid.
     assert 395 < xp.x[4, 3].values.item() < 405
     assert 495 < xp.y[4, 3].values.item() < 505
+
+
+# =============================================================================
+# Tests - Rectangular Chips
+# =============================================================================
+
+
+def test_rectangular_chip_3x5():
+    """Test rectangular chip with more columns than rows."""
+    data = xr.DataArray(data=draw_chip((3, 5), 20), dims=("y", "x"))
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(3, 5),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    assert xp.roi.sizes["mark_row"] == 3
+    assert xp.roi.sizes["mark_col"] == 5
+
+    # Check corner positions.
+    assert 95 < xp.x[0, 0].values.item() < 105
+    assert 95 < xp.y[0, 0].values.item() < 105
+    assert 495 < xp.x[0, 4].values.item() < 505  # Last column
+    assert 295 < xp.y[2, 0].values.item() < 305  # Last row
+
+
+def test_rectangular_chip_5x3():
+    """Test rectangular chip with more rows than columns."""
+    data = xr.DataArray(data=draw_chip((5, 3), 20), dims=("y", "x"))
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(5, 3),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    assert xp.roi.sizes["mark_row"] == 5
+    assert xp.roi.sizes["mark_col"] == 3
+
+    # Check corner positions.
+    assert 95 < xp.x[0, 0].values.item() < 105
+    assert 95 < xp.y[0, 0].values.item() < 105
+    assert 295 < xp.x[0, 2].values.item() < 305  # Last column
+    assert 495 < xp.y[4, 0].values.item() < 505  # Last row
+
+
+# =============================================================================
+# Tests - Different Button Sizes and Spacing
+# =============================================================================
+
+
+def test_large_buttons():
+    """Test detection of larger buttons."""
+    data = xr.DataArray(
+        data=draw_chip((4, 4), button_diameter=40, row_dist=150, col_dist=150), dims=("y", "x")
+    )
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(4, 4),
+        min_button_diameter=30,
+        max_button_diameter=50,
+        chamber_diameter=100,
+        overlap=0,
+        row_dist=150,
+        col_dist=150,
+        num_iter=5000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    assert xp.roi.sizes["mark_row"] == 4
+    assert xp.roi.sizes["mark_col"] == 4
+
+    # Check that detected buttons are larger.
+    radius = 20
+    radii = np.sqrt(xp.fg.sum(["roi_x", "roi_y"]).to_numpy() / np.pi)
+    assert 0.85 * radius < radii.min()
+    assert radii.max() < 1.15 * radius
+
+
+def test_rectangular_spacing():
+    """Test chip with different row and column spacing."""
+    data = xr.DataArray(data=draw_chip((4, 4), 20, row_dist=80, col_dist=120), dims=("y", "x"))
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(4, 4),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=80,
+        col_dist=120,
+        num_iter=5000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    assert xp.roi.sizes["mark_row"] == 4
+    assert xp.roi.sizes["mark_col"] == 4
+
+    # Verify spacing is correct.
+    # Row 0 to Row 1 should be ~80 pixels apart.
+    row_diff = xp.y[1, 0].values.item() - xp.y[0, 0].values.item()
+    assert 70 < row_diff < 90
+
+    # Col 0 to Col 1 should be ~120 pixels apart.
+    col_diff = xp.x[0, 1].values.item() - xp.x[0, 0].values.item()
+    assert 110 < col_diff < 130
+
+
+# =============================================================================
+# Tests - Edge Cases
+# =============================================================================
+
+
+def test_2x2_chip(chip_2x2):
+    """Test small 2x2 chip."""
+    xp = mg.microfluidic_chip(
+        data=chip_2x2,
+        shape=(2, 2),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=1000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    assert xp.roi.sizes["mark_row"] == 2
+    assert xp.roi.sizes["mark_col"] == 2
+
+    # Check all four positions. x increases with col, y increases with row.
+    for i in range(2):
+        for j in range(2):
+            expected_x = (j + 1) * 100  # col_dist = 100
+            expected_y = (i + 1) * 100  # row_dist = 100
+            assert 0.9 * expected_x < xp.x[i, j].values.item() < 1.1 * expected_x
+            assert 0.9 * expected_y < xp.y[i, j].values.item() < 1.1 * expected_y
+
+
+def test_chip_with_blanks():
+    """Test that chip with blank positions still detects non-blank buttons."""
+    blanks = [(0, 0), (1, 2), (2, 1), (3, 3)]
+    data = xr.DataArray(data=draw_chip((4, 4), 20, blanks=blanks), dims=("y", "x"))
+
+    xp = mg.microfluidic_chip(
+        data=data,
+        shape=(4, 4),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=5000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack().transpose("mark_row", "mark_col", ...)
+
+    assert xp.roi.sizes["mark_row"] == 4
+    assert xp.roi.sizes["mark_col"] == 4
+
+    # All 16 positions exist but some should have smaller foreground (blank).
+    areas = xp.fg.sum(["roi_x", "roi_y"]).to_numpy()
+    # Most buttons should have reasonable area.
+    good_button_count = np.sum(areas > 100)
+    assert good_button_count >= 12  # At least 12 of 16 should be detected
+
+
+# =============================================================================
+# Tests - Output Structure
+# =============================================================================
+
+
+def test_chip_output_structure(chip_2x2):
+    """Test that output dataset has expected structure."""
+    xp = mg.microfluidic_chip(
+        data=chip_2x2,
+        shape=(2, 2),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=1000,
+    )
+
+    assert isinstance(xp, xr.Dataset)
+
+    # Output is unstacked (restore_format unstacks mark -> mark_row, mark_col).
+    assert "mark_row" in xp.dims
+    assert "mark_col" in xp.dims
+
+    # Check required coordinates exist.
+    assert "x" in xp.coords
+    assert "y" in xp.coords
+    assert "fg" in xp.coords
+    assert "bg" in xp.coords
+    assert "tag" in xp.coords
+
+    # Check required data variables.
+    assert "roi" in xp.data_vars
+
+    # Check roi dimensions.
+    assert "roi_x" in xp.dims
+    assert "roi_y" in xp.dims
+
+
+def test_chip_unstacked_structure(chip_2x2):
+    """Test that unstacked output has row/col dimensions."""
+    xp = mg.microfluidic_chip(
+        data=chip_2x2,
+        shape=(2, 2),
+        min_button_diameter=16,
+        max_button_diameter=32,
+        overlap=0,
+        row_dist=100,
+        col_dist=100,
+        num_iter=1000,
+    )
+    assert isinstance(xp, xr.Dataset)
+    xp = xp.unstack()
+
+    assert "mark_row" in xp.dims
+    assert "mark_col" in xp.dims

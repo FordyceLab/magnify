@@ -548,7 +548,14 @@ class BeadFinder:
                 ("mark", "time"),
                 np.repeat(beads[:, np.newaxis, 0], assay.sizes["time"], axis=1),
             ),
+            valid=(
+                ("mark", "time"),
+                np.ones((num_beads, assay.sizes["time"]), dtype=bool),
+            ),
         )
+
+        if num_beads == 0:
+            return assay
 
         # Create a label array that contains the areas owned by each bead.
         labels = utils.circle_labels(beads.astype(int), assay.sizes["im_y"], assay.sizes["im_x"])
@@ -595,13 +602,6 @@ class BeadFinder:
             assay.roi[:, i] = roi
 
         assay.mg.cache(["roi", "fg", "bg"])
-        assay = assay.assign_coords(
-            valid=(
-                ("mark", "time"),
-                np.ones((assay.sizes["mark"], assay.sizes["time"]), dtype=bool),
-            ),
-        )
-
         return assay
 
     @registry.components.register("find_beads")

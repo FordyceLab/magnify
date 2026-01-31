@@ -297,6 +297,9 @@ def candidate_circles(edges, grid_length, num_iter):
     # Find the coordinates of all edges.
     coords = np.column_stack(np.where(edges))
 
+    if len(coords) == 0:
+        return np.empty((0, 3), dtype=np.float32)
+
     # Create a coarse grid of the image for fast neighbor lookup.
     grid_coords, grid_starts, grid_counts = grid_array(edges, grid_length)
 
