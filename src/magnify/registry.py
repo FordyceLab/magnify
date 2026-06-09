@@ -618,6 +618,9 @@ def image(
     rotation: float = 0,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    flatfield: float = 1.0,
+    darkfield: float = 0.0,
+    flatfield_smooth_sigma: float = 0.0,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
     Read in images and standardize the resulting data in an xarray.Dataset.
@@ -636,6 +639,21 @@ def image(
         If True, only returns the region of interest from the dataset.
     drop_tiles :
         If True, removes the "tile" variable from the dataset after stitching.
+    flatfield :
+        Per-tile flatfield reference. Scalar 1.0 (default) is a no-op. A path to
+        a TIFF, a 2-D numpy array of shape ``(tile_y, tile_x)``, or an
+        ``xr.DataArray`` with ``tile_y, tile_x`` dims will be applied as
+        ``corrected = (tile − darkfield) / (flatfield / mean(flatfield))``
+        before stitching. See :func:`magnify.preprocess.flatfield_correct`.
+    darkfield :
+        Per-tile darkfield reference (camera dark). Same accepted types as
+        ``flatfield``. Scalar 0.0 (default) is a no-op.
+    flatfield_smooth_sigma :
+        If > 0, apply a Gaussian blur of this sigma (in pixels) to the
+        flatfield reference before normalizing it. Suppresses acquisition
+        noise and local artifacts in the flatfield (e.g. dust, dye-puddle
+        features) while keeping the broad illumination gradient. Typical
+        values: 30–100 px. Default 0 = no smoothing.
     Returns
     -------
     Processed image(s) : xr.Dataset | list[xr.Dataset]
@@ -650,6 +668,8 @@ def image(
       metadata.
     - 'standardize_format' : Transforms the dataset into a consistent format for
       downstream processing.
+    - 'flatfield_correct' : Applies flatfield and darkfield corrections per tile
+      (skipped when both are the default scalars).
     - 'stitch' : Stitches image tiles based on the overlap parameter.
     - 'drop' : Optionally removes elements in the dataset based on the `roi_only` and
       `drop_tiles` options.
@@ -665,6 +685,9 @@ def image(
         rotation=rotation,
         roi_only=roi_only,
         drop_tiles=drop_tiles,
+        flatfield=flatfield,
+        darkfield=darkfield,
+        flatfield_smooth_sigma=flatfield_smooth_sigma,
     )
     return pipe(data=data)
 
@@ -674,10 +697,17 @@ def image_pipe(
     rotation: float = 0,
     roi_only: bool = False,
     drop_tiles: bool = True,
+    flatfield: float = 1.0,
+    darkfield: float = 0.0,
+    flatfield_smooth_sigma: float = 0.0,
 ) -> Pipeline:
     """
     Build a Pipeline object that reads in an image and standardizes the resulting data
     in an xarray.Dataset.
+
+    The flatfield correction step is inserted only when at least one of ``flatfield``
+    or ``darkfield`` differs from its default no-op scalar — keeping the pipeline a
+    pure passthrough when no correction is requested.
 
     Reference
     -------
@@ -686,6 +716,14 @@ def image_pipe(
     """
     pipe = Pipeline("read")
     pipe.add_pipe("standardize_format")
+    # Only insert flatfield correction when the user actually supplied a
+    # reference; otherwise leave the pipeline identical to the pre-flatfield
+    # behavior so existing callers see no change.
+    if not (isinstance(flatfield, (int, float)) and flatfield == 1.0
+            and isinstance(darkfield, (int, float)) and darkfield == 0.0):
+        pipe.add_pipe("flatfield_correct", flatfield=flatfield,
+                      darkfield=darkfield,
+                      smooth_sigma=flatfield_smooth_sigma)
     pipe.add_pipe("stitch", overlap=overlap)
     pipe.add_pipe("rotate", rotation=rotation)
     pipe.add_pipe("drop", roi_only=roi_only, drop_tiles=drop_tiles)
