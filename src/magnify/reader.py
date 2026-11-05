@@ -34,7 +34,13 @@ class Reader:
             for name in sorted(path_dict, key=lambda n: utils.natural_sort_key(n or "")):
                 path = pathlib.Path(path_dict[name])
                 # The last element in the path is the zarr group directory.
-                xp = xr.open_zarr(path.parent, group=path.name, consolidated=False)
+                try:
+                    xp = xr.open_zarr(path.parent, group=path.name, consolidated=False)
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not read {path} as a zarr group (matched by pattern {d!r}). "
+                        "Each match should be a zarr group directory written by magnify."
+                    ) from e
                 xp.attrs["name"] = name or ""
 
                 yield xp
